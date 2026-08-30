@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compare `docker-devtools context ls` against what Docker really sends.
+# Compare `docker-devtools build-context ls` against what Docker really sends.
 #
 # For each fixture the script builds `FROM scratch` + `COPY . /` with the
 # tar exporter, so the resulting tarball is exactly the build context Docker
@@ -32,8 +32,11 @@ for dir in testdata/dctx/*/; do
   ctx="${dir}context"
   [ -d "$ctx" ] || continue
 
-  # A fixture may pin a non-default Dockerfile name, which also selects
-  # "<name>.dockerignore" over ".dockerignore".
+  # A fixture may pin a non-default Dockerfile, which also selects
+  # "<path>.dockerignore" over ".dockerignore". case.json records it relative to
+  # the fixture directory rather than to the context, so that the identical -f
+  # string can go to docker and to us: -f is resolved from the working
+  # directory, and a fixture Dockerfile may sit outside its own context.
   dockerfile=""
   if [ -f "${dir}case.json" ]; then
     dockerfile="$(sed -n 's/.*"dockerfile"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' "${dir}case.json")"
@@ -41,13 +44,13 @@ for dir in testdata/dctx/*/; do
 
   tarball="$(mktemp -d)/ctx.tar"
   if [ -n "$dockerfile" ]; then
-    docker build --no-cache -f "$ctx/$dockerfile" \
+    docker build --no-cache -f "${dir}${dockerfile}" \
       --output "type=tar,dest=$tarball" "$ctx" >/dev/null 2>&1
-    ours="$("$BIN" context ls -f "$dockerfile" "$ctx")"
+    ours="$("$BIN" build-context ls -f "${dir}${dockerfile}" "$ctx")"
   else
     docker build --no-cache \
       --output "type=tar,dest=$tarball" "$ctx" >/dev/null 2>&1
-    ours="$("$BIN" context ls "$ctx")"
+    ours="$("$BIN" build-context ls "$ctx")"
   fi
 
   # The tar exporter marks directories with a trailing slash; our listing

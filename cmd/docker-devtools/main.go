@@ -34,8 +34,11 @@ type Streams struct {
 // CLI is the whole command tree. kong derives parsing, help and, through
 // kong-usage, the KDL spec that drives shell completions.
 type CLI struct {
-	Context ContextCmd `cmd:"" help:"Inspect the build context a Dockerfile would send."`
-	Image   ImageCmd   `cmd:"" help:"Find and update image references."`
+	// Named away from "context" and "image": both are real docker commands
+	// (docker context ls lists CLI endpoints, docker image ls lists local
+	// images) and neither means anything close to what these do.
+	Context ContextCmd `cmd:"" name:"build-context" help:"Inspect the build context a Dockerfile would send."`
+	Image   ImageCmd   `cmd:"" name:"image-refs" help:"Find and update the image references in a repository."`
 
 	InstallDockerPlugin InstallPluginCmd `cmd:"" name:"install-docker-plugin" help:"Register this binary as the \"docker devtools\" plugin."`
 	Version             VersionCmd       `cmd:"" help:"Print the version."`
@@ -62,7 +65,7 @@ func (c *InstallPluginCmd) Run(st *Streams) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(st.Stdout, "installed %s\nrun it with: docker %s context ls\n", path, plugin.PluginName)
+	fmt.Fprintf(st.Stdout, "installed %s\nrun it with: docker %s build-context ls\n", path, plugin.PluginName)
 	return nil
 }
 

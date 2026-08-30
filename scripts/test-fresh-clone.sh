@@ -71,7 +71,7 @@ step "install the wheel into a clean venv and use it three ways"
 mise x -- uv venv --quiet /tmp/venv
 mise x -- uv pip install --quiet --python /tmp/venv/bin/python /tmp/dist/*.whl
 /tmp/venv/bin/docker-devtools version
-/tmp/venv/bin/python -m docker_devtools image ls testdata/imageref
+/tmp/venv/bin/python -m docker_devtools image-refs ls testdata/imageref
 /tmp/venv/bin/python -c "import docker_devtools as d; print(len(d.image_ls('testdata/imageref').refs), 'refs')"
 
 step "the binary is a direct executable, not a python shim"

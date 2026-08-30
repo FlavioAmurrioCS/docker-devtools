@@ -14,20 +14,24 @@ import (
 // dctx package, whose output scripts/conformance.sh diffs against a real
 // docker build for every fixture.
 type ContextCmd struct {
-	Ls      ContextLsCmd      `cmd:"" help:"List the files Docker sends as the build context."`
-	Explain ContextExplainCmd `cmd:"" help:"Show which .dockerignore rule decided a path."`
+	Ls ContextLsCmd `cmd:"" aliases:"list" help:"List the files Docker sends as the build context."`
 }
 
 type ContextLsCmd struct {
-	Path string `arg:"" optional:"" default:"." help:"Build context directory." type:"path"`
+	// No type:"path": kong would absolutise this before dctx sees it, and every
+	// diagnostic below would then quote a path the caller never typed. dctx
+	// absolutises internally where it matters.
+	Path string `arg:"" optional:"" default:"." help:"Build context directory."`
 
-	File    string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the context. Also selects <path>.dockerignore."`
+	File    string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the current directory (default: PATH/Dockerfile). Also selects <path>.dockerignore."`
 	Ignored bool   `xor:"mode" help:"List the excluded files instead of the included ones."`
 	All     bool   `xor:"mode" help:"List every file, prefixed + for sent and - for excluded."`
 	Size    bool   `help:"Prefix each path with its size in bytes."`
+	Why     bool   `xor:"format" help:"Append the ignore-file rule that decided each path."`
 	Summary bool   `help:"Print totals to stderr after the listing."`
 	JSON    bool   `name:"json" help:"Emit the full result as JSON."`
-	Zero    bool   `short:"0" help:"Separate paths with NUL, for xargs -0."`
+	// --why annotates each line, which would corrupt output meant for xargs.
+	Zero bool `short:"0" xor:"format" help:"Separate paths with NUL, for xargs -0."`
 }
 
 func (c *ContextLsCmd) Run(st *Streams) error {
@@ -71,6 +75,9 @@ func (c *ContextLsCmd) Run(st *Streams) error {
 			fmt.Fprintf(&b, "%10d  ", e.Size)
 		}
 		b.WriteString(e.Path)
+		if c.Why && e.Rule != "" {
+			fmt.Fprintf(&b, "  <- %s:%d %s", res.Ignorefile, e.RuleLine, e.Rule)
+		}
 		b.WriteString(sep)
 		if _, err := stringWrite(st.Stdout, b.String()); err != nil {
 			return err
@@ -78,53 +85,6 @@ func (c *ContextLsCmd) Run(st *Streams) error {
 	}
 	if c.Summary {
 		printSummary(st.Stderr, res)
-	}
-	return nil
-}
-
-type ContextExplainCmd struct {
-	Path string `arg:"" help:"Path to explain, relative to the context or absolute. It need not exist."`
-
-	Dir  string `short:"C" default:"." placeholder:"DIR" help:"Build context directory." type:"path"`
-	File string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the context. Also selects <path>.dockerignore."`
-	JSON bool   `name:"json" help:"Emit the explanation as JSON."`
-}
-
-func (c *ContextExplainCmd) Run(st *Streams) error {
-	exp, err := dctx.Explain(dctx.Options{Context: c.Dir, Dockerfile: c.File}, c.Path)
-	if err != nil {
-		return err
-	}
-	for _, w := range exp.Warnings {
-		fmt.Fprintln(st.Stderr, "warning:", w)
-	}
-	if c.JSON {
-		return writeJSON(st.Stdout, exp)
-	}
-
-	fmt.Fprintf(st.Stdout, "%s: %s\n", exp.Path, exp.Status)
-	if !exp.Exists {
-		fmt.Fprintln(st.Stdout, "  (path does not exist in the context)")
-	}
-	label := exp.Ignorefile
-	if label == "" {
-		label = "(no ignore file)"
-	}
-	if len(exp.Rules) == 0 {
-		fmt.Fprintf(st.Stdout, "  no rule in %s matches; included by default\n", label)
-		return nil
-	}
-	for _, r := range exp.Rules {
-		effect := "ignored"
-		if r.Negated {
-			effect = "re-included"
-		}
-		line := fmt.Sprintf("  %s:%d", label, r.Line)
-		fmt.Fprintf(st.Stdout, "%-24s %-24s %s", line, r.Rule, effect)
-		if r.Decisive {
-			fmt.Fprint(st.Stdout, "  (decisive)")
-		}
-		fmt.Fprintln(st.Stdout)
 	}
 	return nil
 }

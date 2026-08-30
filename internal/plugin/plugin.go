@@ -20,7 +20,7 @@ const (
 	// pluginNameFormat = `^[a-z][a-z0-9]*$` (cli-plugins/manager/plugin.go),
 	// so "build-context" is rejected outright with "plugin candidate
 	// \"docker-devtools\" did not match". Hence "devtools", which also reads
-	// well as "docker devtools context ls".
+	// well as "docker devtools build-context ls".
 	PluginName = "devtools"
 
 	// MetadataSubcommand is the subcommand every plugin must answer

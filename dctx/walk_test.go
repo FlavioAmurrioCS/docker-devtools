@@ -15,7 +15,19 @@ var update = flag.Bool("update", false, "rewrite golden files")
 
 // fixtureCase is the optional case.json beside a fixture context.
 type fixtureCase struct {
+	// Dockerfile is relative to the fixture directory, not to the context, so
+	// that the same string can be handed to our binary and to docker build.
+	// scripts/conformance.sh passes it to both.
 	Dockerfile string `json:"dockerfile"`
+}
+
+// dockerfilePath returns the -f value for a fixture, which is a path resolved
+// from the working directory, exactly as docker build resolves it.
+func (c fixtureCase) dockerfilePath(dir string) string {
+	if c.Dockerfile == "" {
+		return ""
+	}
+	return filepath.Join(dir, c.Dockerfile)
 }
 
 func fixtures(t *testing.T) []string {
@@ -99,7 +111,7 @@ func TestWalkGolden(t *testing.T) {
 			t.Run(name+"/"+mode.name, func(t *testing.T) {
 				res, err := Walk(context.Background(), Options{
 					Context:    filepath.Join(dir, "context"),
-					Dockerfile: c.Dockerfile,
+					Dockerfile: c.dockerfilePath(dir),
 					Mode:       mode.mode,
 				})
 				if err != nil {

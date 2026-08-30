@@ -4,11 +4,11 @@ Work on the Docker files in a repository: the build context a Dockerfile would
 send, and the image references it and your Compose files point at.
 
 ```console
-$ docker-devtools image ls
+$ docker-devtools image-refs ls
 Dockerfile:1        python:3.11-slim
 compose.yaml:3      nginx:1.25-alpine
 
-$ docker-devtools image update --tag-policy same-pattern --dry-run
+$ docker-devtools image-refs update --tag-policy same-pattern --dry-run
 Dockerfile:1     python:3.11-slim -> python:3.14-slim      (tag 3.11-slim -> 3.14-slim)
 compose.yaml:3   nginx:1.25-alpine -> nginx:1.31-alpine    (tag 1.25-alpine -> 1.31-alpine)
 ```
@@ -33,13 +33,13 @@ Where the semantics are Docker's, this defers to Docker's own code:
 None of the `.dockerignore` semantics are reimplemented here, and CI checks
 that rather than asserting it: for every fixture, `scripts/conformance.sh`
 builds `FROM scratch` with `COPY . /`, exports the image as a tarball, and
-diffs the tar members against what `context ls` reports.
+diffs the tar members against what `build-context ls` reports.
 
 ## Install
 
 ```console
-$ uvx docker-devtools image ls          # no install
-$ pipx run docker-devtools image ls     # no install
+$ uvx docker-devtools image-refs ls          # no install
+$ pipx run docker-devtools image-refs ls     # no install
 $ uv tool install docker-devtools
 $ pip install docker-devtools
 $ mise use ubi:FlavioAmurrioCS/docker-devtools
@@ -57,6 +57,12 @@ Reading and updating files doesn't require a Docker installation or a running
 daemon.
 Registry lookups authenticate with the same `~/.docker/config.json` the docker
 CLI uses.
+
+The build context is what BuildKit would send, because `docker build` forwards to
+buildx by default. The legacy builder never learned `<dockerfile>.dockerignore`
+at all. Its `ReadDockerignore` opens only `<context>/.dockerignore`, so a
+`DOCKER_BUILDKIT=0` build legitimately disagrees with this listing whenever a
+per-Dockerfile ignore file is in play.
 
 ## As a pre-commit hook
 
@@ -89,31 +95,55 @@ the `docker-devtools` it puts on PATH.
 ## Usage
 
 ```text
-docker-devtools context ls [PATH]        list the files Docker would send
-docker-devtools context explain PATH     show which .dockerignore rule decided a path
-docker-devtools image ls [PATH...]       list every image reference, with file and line
-docker-devtools image update [PATH...]   rewrite references in place
-docker-devtools install-docker-plugin    register as "docker devtools"
-docker-devtools version                  print the version (also --version)
+docker-devtools build-context ls [PATH]      list the files Docker would send
+docker-devtools image-refs ls [PATH...]      list every image reference, with file and line
+docker-devtools image-refs update [PATH...]  rewrite references in place
+docker-devtools install-docker-plugin        register as "docker devtools"
+docker-devtools version                      print the version (also --version)
 ```
 
-`PATH` means the build context directory for `context ls`, and files or
-directories to scan for the image commands. `context explain` is the exception:
-its argument is the path being explained, and the context directory moves to
-`-C`.
+`ls` is also spelled `list`. The groups are named away from `context` and
+`image` on purpose: `docker context ls` lists CLI endpoints and `docker image ls`
+lists local images, and neither is anything like what these do.
 
-Every command takes `--json`, which is the same document the Python API parses.
+`PATH` is the build context directory for `build-context ls`, and files or
+directories to scan for `image-refs`. Every command takes `--json`, which is the
+same document the Python API parses.
 
-`context ls` lists directories in their own right, the way `docker build` sends
-them, so a listing piped through `-0` into `xargs` gets both. It also takes:
+`build-context ls` lists directories in their own right, the way `docker build`
+sends them, so a listing piped through `-0` into `xargs` gets both. It also
+takes:
 
 ```text
 -f, --file PATH   Dockerfile to derive <path>.dockerignore from
     --ignored     list what the ignore file excluded instead
     --all         list everything, prefixed + for sent and - for excluded
     --size        prefix each path with its size in bytes
+    --why         append the ignore-file rule that decided each path
     --summary     print totals to stderr after the listing
 -0, --zero        separate paths with NUL
+```
+
+### Which .dockerignore applies
+
+`-f` takes a path, resolved from your working directory rather than from the
+context. That is the rule `docker build -f` follows, and the Dockerfile may sit
+outside the context entirely. The ignore file is the one **beside the
+Dockerfile**, `<path>.dockerignore`, falling back to `<context>/.dockerignore`.
+The first wins outright. They never merge.
+
+```console
+$ docker-devtools build-context ls -f docker/build.Dockerfile ./app
+  # reads docker/build.Dockerfile.dockerignore, else app/.dockerignore
+```
+
+`--why` says which rule decided each path, which is usually the question:
+
+```console
+$ docker-devtools build-context ls --all --why
++ app.js
+- node_modules/drop/index.js  <- .dockerignore:1 node_modules
++ node_modules/keep/index.js  <- .dockerignore:2 !node_modules/keep
 ```
 
 ### Updating image references
@@ -155,7 +185,7 @@ does.
 ### What it will not touch
 
 Some references cannot be resolved to an image, and those are reported rather
-than guessed at. Pass `--unresolved` to `image ls` to see them:
+than guessed at. Pass `--unresolved` to `image-refs ls` to see them:
 
 - `FROM builder`, where `builder` is an earlier stage
 - `COPY --from=0`, which indexes a stage
@@ -202,7 +232,7 @@ reference, into `build/`.
 
 ```console
 $ docker-devtools install-docker-plugin
-$ docker devtools image ls
+$ docker devtools image-refs ls
 ```
 
 This symlinks the binary into `~/.docker/cli-plugins/`, so upgrading the binary

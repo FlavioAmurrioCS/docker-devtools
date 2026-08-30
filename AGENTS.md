@@ -16,7 +16,7 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
 
 2. **`scripts/conformance.sh` is the source of truth for `dctx`.** It builds
    each fixture with `FROM scratch` and `COPY . /`, exports the tarball, and
-   diffs the members against `context ls`. When it disagrees with a unit test,
+   diffs the members against `build-context ls`. When it disagrees with a unit test,
    the unit test is wrong. It is what caught the materialised-directory
    behaviour that every other check missed. Run it after touching matching or
    walking.
@@ -53,6 +53,18 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
   writes to disk.
 - `dctx` is the one package here with a public import path, because the walker
   is worth reusing on its own. Treat its exported names as API.
+- `-f` is a path resolved from the working directory, not from the context, and
+  the ignore file is the one beside the Dockerfile. That is docker's rule, stated
+  outright in docker/cli `cli/command/image/build/context.go`, and produced by
+  buildx (`build/opt.go` mounts `filepath.Dir(-f)` as a separate "dockerfile"
+  input) plus the frontend (buildkit `frontend/dockerui/config.go` reads
+  `filename + ".dockerignore"` from it, and falls back to the context root only
+  when that came up empty). `testdata/dctx/outofcontext` pins it against a real
+  build; its decoy ignore file inside the context fails the fixture loudly if
+  resolution ever drifts back to context-relative.
+- We conform to BuildKit, not the legacy builder. `docker build` forwards to
+  buildx by default (docker/cli `cmd/docker/builder.go`), and the legacy builder
+  never supported `<dockerfile>.dockerignore` at all.
 
 Registry tests use `go-containerregistry`'s in-process registry
 (`pkg/registry`) with synthetic images (`pkg/v1/random`). Add tests there rather
@@ -120,7 +132,10 @@ The distribution name, the binary name and the repo name are all
 docker-devtools` work without configuration. Do not add a short alias.
 
 The Docker plugin subcommand is `devtools`, with no hyphen, because Docker
-validates plugin names against `^[a-z][a-z0-9]*$`.
+validates plugin names against `^[a-z][a-z0-9]*$`. That rule applies to the
+plugin name only, so `build-context` and `image-refs` may hyphenate.
+Both are named away from `context` and `image` because `docker context ls` and
+`docker image ls` are real commands meaning something else entirely.
 
 ## Prose is linted
 

@@ -1,1 +1,1 @@
-{"dockerfile": "docker/Dockerfile.dev"}
+{"dockerfile": "context/docker/Dockerfile.dev"}

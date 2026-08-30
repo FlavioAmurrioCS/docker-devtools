@@ -32,7 +32,6 @@ type Explanation struct {
 	Status     Status        `json:"status"`
 	Exists     bool          `json:"exists"`
 	Rules      []MatchedRule `json:"rules"`
-	Warnings   []string      `json:"warnings,omitempty"`
 }
 
 // Explain reports which ignore-file rules apply to target and which one
@@ -45,7 +44,7 @@ func Explain(opt Options, target string) (*Explanation, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := CheckContextDir(contextDir); err != nil {
+	if err := CheckContextDir(opt.Context); err != nil {
 		return nil, err
 	}
 
@@ -54,7 +53,10 @@ func Explain(opt Options, target string) (*Explanation, error) {
 		return nil, err
 	}
 
-	dockerfile := ResolveDockerfile(contextDir, opt.Dockerfile)
+	dockerfile, err := ResolveDockerfile(opt.Context, opt.Dockerfile)
+	if err != nil {
+		return nil, err
+	}
 	ignoreFile, err := LoadIgnoreFile(contextDir, dockerfile)
 	if err != nil {
 		return nil, err
@@ -94,15 +96,12 @@ func Explain(opt Options, target string) (*Explanation, error) {
 	exp := &Explanation{
 		Schema:     SchemaVersion,
 		Context:    contextDir,
-		Dockerfile: dockerfile,
+		Dockerfile: dockerfile.Display,
 		Ignorefile: ignoreFile.Name,
 		Path:       filepath.ToSlash(rel),
 		Status:     statusOf(ignored),
 		Exists:     exists,
 		Rules:      rules,
-	}
-	if warn := dockerfileWarning(contextDir, opt.Dockerfile, ignoreFile.Name); warn != "" {
-		exp.Warnings = append(exp.Warnings, warn)
 	}
 	return exp, nil
 }

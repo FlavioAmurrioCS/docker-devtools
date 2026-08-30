@@ -3,23 +3,26 @@
 - id: docker-image-pin
   name: pin image references to digests
   description: Append or refresh the @sha256 digest on every image reference.
-  entry: docker-devtools image update --pin-digest
+  entry: docker-devtools image-refs update --pin-digest
   language: python
   files: (^|/)(Dockerfile|Containerfile)([^/]*)$|(^|/)(docker-)?compose([^/]*)\.ya?ml$
+  exclude: \.dockerignore$
   pass_filenames: true
 
 - id: docker-image-check
   name: check image references are current
   description: Fail when a tag could move under the same-pattern policy. Writes nothing.
-  entry: docker-devtools image update --tag-policy same-pattern --dry-run --fail-on-diff
+  entry: docker-devtools image-refs update --tag-policy same-pattern --dry-run --fail-on-diff
   language: python
   files: (^|/)(Dockerfile|Containerfile)([^/]*)$|(^|/)(docker-)?compose([^/]*)\.ya?ml$
+  exclude: \.dockerignore$
   pass_filenames: true
 
 - id: docker-image-update
   name: update image references
   description: Move tags in place under the same-pattern policy.
-  entry: docker-devtools image update --tag-policy same-pattern
+  entry: docker-devtools image-refs update --tag-policy same-pattern
   language: python
   files: (^|/)(Dockerfile|Containerfile)([^/]*)$|(^|/)(docker-)?compose([^/]*)\.ya?ml$
+  exclude: \.dockerignore$
   pass_filenames: true

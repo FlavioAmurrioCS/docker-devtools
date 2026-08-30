@@ -11,7 +11,7 @@ import (
 
 // ImageCmd groups the commands that work on image references.
 type ImageCmd struct {
-	Ls     ImageLsCmd     `cmd:"" help:"List every image reference, with the file and line it sits on."`
+	Ls     ImageLsCmd     `cmd:"" aliases:"list" help:"List every image reference, with the file and line it sits on."`
 	Update ImageUpdateCmd `cmd:"" help:"Rewrite image references in place."`
 }
 
