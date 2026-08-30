@@ -137,6 +137,14 @@ func TestFileKind(t *testing.T) {
 		"compose.prod.yaml":   KindComposeImage,
 		"README.md":           "",
 		"values.yaml":         "",
+		// An ignore file is named after its Dockerfile and sits beside it, so
+		// it matches the "Dockerfile." prefix. Parsing it as instructions
+		// reports "unknown instruction" for a valid file.
+		".dockerignore":                 "",
+		"Dockerfile.dockerignore":       "",
+		"Dockerfile.dev.dockerignore":   "",
+		"api.Dockerfile.dockerignore":   "",
+		"build.Dockerfile.dockerignore": "",
 	}
 	for in, want := range cases {
 		if got := FileKind(in); got != want {

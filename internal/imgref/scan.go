@@ -17,6 +17,12 @@ var composeName = regexp.MustCompile(`^(docker-)?compose(\.[^.]+)*\.ya?ml$`)
 func FileKind(path string) Kind {
 	base := filepath.Base(path)
 	switch {
+	// An ignore file is named after its Dockerfile, so "Dockerfile.dev" and
+	// "Dockerfile.dev.dockerignore" sit side by side and both match the
+	// "Dockerfile." prefix below. Parsing patterns as instructions produces
+	// "unknown instruction: node_modules" for a perfectly valid file.
+	case strings.HasSuffix(base, ".dockerignore"), base == ".dockerignore":
+		return ""
 	case base == "Dockerfile" || base == "dockerfile" || base == "Containerfile":
 		return KindDockerfileFrom
 	case strings.HasPrefix(base, "Dockerfile."), strings.HasSuffix(base, ".Dockerfile"):
