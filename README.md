@@ -58,6 +58,34 @@ daemon.
 Registry lookups authenticate with the same `~/.docker/config.json` the docker
 CLI uses.
 
+## As a pre-commit hook
+
+```yaml
+repos:
+  - repo: https://github.com/FlavioAmurrioCS/docker-devtools
+    rev: v0.0.1
+    hooks:
+      - id: docker-image-check
+```
+
+The hooks are scoped to `Dockerfile*`, `Containerfile*` and
+`(docker-)?compose*.ya?ml` already:
+
+| Hook | What it does |
+| --- | --- |
+| `docker-image-check` | Fails when a tag could move. Writes nothing. |
+| `docker-image-update` | Moves tags in place, under `same-pattern`. |
+| `docker-image-pin` | Appends or refreshes the `@sha256` digest. |
+
+Each one reaches the registry, so a hook is only as fast as the tag listing it
+asks for. `docker-image-check` is the one to reach for first: it reports without
+touching the tree.
+
+pre-commit installs a `repo:` from source, and building this one compiles the Go
+binary, so the machine running the hook needs a Go toolchain. Somewhere that
+cannot have one, install the published wheel instead and point a `local` hook at
+the `docker-devtools` it puts on PATH.
+
 ## Usage
 
 ```text
@@ -66,6 +94,26 @@ docker-devtools context explain PATH     show which .dockerignore rule decided a
 docker-devtools image ls [PATH...]       list every image reference, with file and line
 docker-devtools image update [PATH...]   rewrite references in place
 docker-devtools install-docker-plugin    register as "docker devtools"
+docker-devtools version                  print the version (also --version)
+```
+
+`PATH` means the build context directory for `context ls`, and files or
+directories to scan for the image commands. `context explain` is the exception:
+its argument is the path being explained, and the context directory moves to
+`-C`.
+
+Every command takes `--json`, which is the same document the Python API parses.
+
+`context ls` lists directories in their own right, the way `docker build` sends
+them, so a listing piped through `-0` into `xargs` gets both. It also takes:
+
+```text
+-f, --file PATH   Dockerfile to derive <path>.dockerignore from
+    --ignored     list what the ignore file excluded instead
+    --all         list everything, prefixed + for sent and - for excluded
+    --size        prefix each path with its size in bytes
+    --summary     print totals to stderr after the listing
+-0, --zero        separate paths with NUL
 ```
 
 ### Updating image references
@@ -82,9 +130,14 @@ may move:
 
 | Current tag | same-pattern | minor | patch | latest |
 | --- | --- | --- | --- | --- |
-| `3.12-slim` | `3.13-slim` | `3.13-slim` | no change | `4.0-slim` |
+| `3.12-slim` | `3.13-slim` | `3.13-slim` | `3.12.7-slim` | `4.0-slim` |
 | `3.12.1-slim` | `3.12.7-slim` | `3.13.0-slim` | `3.12.7-slim` | `4.0-slim` |
 | `latest` | no change | no change | no change | no change |
+
+Only `same-pattern` keeps the shape of a tag. The other three compare version
+components, and a component the current tag omits counts as zero, so `patch` can
+turn `3.12-slim` into `3.12.7-slim`: a tag that pinned a minor line now pins a
+patch.
 
 No policy ever changes the suffix: `-alpine` and `-slim` are different images,
 and swapping them would change your base distribution without saying so. Tags
@@ -93,6 +146,11 @@ is no ordering to move along.
 
 Add `--dry-run` to see the plan without writing, and `--fail-on-diff` to exit
 non-zero when anything would change, which is what makes it useful in CI.
+
+`--fail-on-diff` reports on the plan, not on the writing, so on its own it
+still rewrites the files and then exits non-zero. Pair it with `--dry-run` for a
+check that leaves the tree alone, which is what the `docker-image-check` hook
+does.
 
 ### What it will not touch
 
@@ -147,8 +205,10 @@ $ docker-devtools install-docker-plugin
 $ docker devtools image ls
 ```
 
-This symlinks the binary into `~/.docker/cli-plugins/`. Use `--system` to
-install it for every user.
+This symlinks the binary into `~/.docker/cli-plugins/`, so upgrading the binary
+upgrades the plugin. Windows gets a copy instead, having no dependable
+unprivileged symlink. `DOCKER_CONFIG` moves the directory, and `--system`
+installs for every user.
 
 The subcommand is `devtools` because Docker validates plugin names against
 `^[a-z][a-z0-9]*$` and refuses to load anything else. Python wheels cannot do
@@ -172,7 +232,12 @@ for change in report.changes:
 ```
 
 `image_update` defaults to `dry_run=True`, so calling it by accident cannot
-rewrite a repository.
+rewrite a repository. The CLI defaults the other way, as a CLI should: `image
+update` writes unless you pass `--dry-run`.
+
+The wrapper shells out to the bundled binary, which the wheel installs onto
+PATH. Where that directory isn't on PATH, `python -m docker_devtools` runs it
+anyway, and `DOCKER_DEVTOOLS_BINARY` points at a specific build.
 
 ## Development
 
@@ -182,6 +247,7 @@ rewrite a repository.
 $ mise run build         # compile into ./build
 $ mise run test          # go test + pytest
 $ mise run lint          # pre-commit across the repo
+$ mise run prose         # vale-ai-tells across all markdown
 $ mise run conformance   # diff context listing against real docker build
 $ mise run completions   # regenerate completions and docs
 $ mise run wheels        # every platform wheel into ./dist

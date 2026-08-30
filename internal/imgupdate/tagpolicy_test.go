@@ -28,6 +28,10 @@ func TestSelectTag(t *testing.T) {
 		{"same pattern will not cross a major", "3.13-slim", PolicySamePattern, ""},
 		{"minor stays inside the major", "3.11-slim", PolicyMinor, "3.13-slim"},
 		{"patch stays inside the minor", "3.12.1-slim", PolicyPatch, "3.12.7-slim"},
+		// patch compares components, not shapes: a missing component counts as
+		// zero, so a tag pinning no patch at all may grow one. Only
+		// same-pattern keeps the shape. The README's policy table says so.
+		{"patch may lengthen a tag that pins no patch", "3.12-slim", PolicyPatch, "3.12.7-slim"},
 		{"latest may cross a major", "3.12-slim", PolicyLatest, "4.0-slim"},
 		{"an unversioned tag never moves", "latest", PolicySamePattern, ""},
 		{"a codename tag never moves", "bookworm", PolicyLatest, ""},

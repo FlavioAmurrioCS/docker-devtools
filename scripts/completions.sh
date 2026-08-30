@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Generate shell completions, markdown docs and a man page from the CLI's own
-# usage spec.
+# Generate shell completions and a markdown reference from the CLI's own usage
+# spec.
 #
 # kong ships no completion of its own, so the binary emits a KDL usage spec
 # (kong-usage walks kong's model) and the usage CLI turns that into scripts.
-# One definition, five shells, plus docs.
+# One definition, five shells, plus a markdown reference.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

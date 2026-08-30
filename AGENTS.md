@@ -66,7 +66,7 @@ one](https://github.com/alecthomas/kong/issues/43) has been open since 2019.
 
 Instead the binary answers `--usage-spec` with a KDL document generated from
 kong's own model by `kong-usage`, and the [usage](https://usage.jdx.dev) CLI
-turns that into completions for five shells, plus markdown and man pages.
+turns that into completions for five shells, plus a markdown reference.
 `mise run completions` does it.
 
 The generated scripts call back to `usage` at completion time, so users need it
@@ -89,6 +89,7 @@ mise.toml defines the tools and the tasks.
 mise run build         # compile into ./build
 mise run test          # go test + pytest
 mise run lint          # pre-commit across the repo
+mise run prose         # vale-ai-tells across all markdown
 mise run completions   # regenerate completions and docs
 mise run wheels        # every platform wheel into ./dist
 mise run test-clone    # verify a fresh clone in a container
