@@ -1,0 +1,2 @@
+Dockerfile:1 dockerfile-from "scratch" UNRESOLVED (scratch is the empty base, not a registry image)
+Dockerfile.pinned:1 dockerfile-from "debian:bookworm-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000" -> registry=index.docker.io repo=library/debian tag=bookworm-slim digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 bytes=5..97

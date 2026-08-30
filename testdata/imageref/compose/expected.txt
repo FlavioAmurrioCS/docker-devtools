@@ -1,0 +1,4 @@
+compose.yaml:8 compose-image "nginx:1.29-alpine" stage=web -> registry=index.docker.io repo=library/nginx tag=1.29-alpine bytes=161..178
+compose.yaml:13 compose-image "postgres:17.2" stage=db -> registry=index.docker.io repo=library/postgres tag=17.2 bytes=248..261
+compose.yaml:18 compose-image "redis:7.4-alpine" stage=cache -> registry=index.docker.io repo=library/redis tag=7.4-alpine bytes=335..351
+compose.yaml:21 compose-image "${REGISTRY}/app:latest" stage=templated UNRESOLVED (depends on a variable)

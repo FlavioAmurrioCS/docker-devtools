@@ -1,0 +1,25 @@
+# A compose file with the formatting quirks a rewrite must not disturb.
+x-common: &common
+  restart: unless-stopped
+
+services:
+  web:
+    <<: *common
+    image: nginx:1.29-alpine   # trailing comment
+    ports:
+      - "8080:80"
+
+  db:
+    image: "postgres:17.2"
+    environment:
+      POSTGRES_PASSWORD: example
+
+  cache:
+    image: 'redis:7.4-alpine'
+
+  templated:
+    image: ${REGISTRY}/app:latest
+
+  built:
+    build:
+      context: .

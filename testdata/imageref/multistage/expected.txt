@@ -1,0 +1,7 @@
+Dockerfile:4 dockerfile-from "golang:1.26-alpine" stage=builder -> registry=index.docker.io repo=library/golang tag=1.26-alpine bytes=81..99
+Dockerfile:8 dockerfile-from "golang:${GO_VERSION}-alpine" stage=argbased UNRESOLVED (depends on a build argument)
+Dockerfile:11 dockerfile-from "builder" stage=second UNRESOLVED (refers to an earlier build stage, not an image)
+Dockerfile:14 dockerfile-from "alpine:3.22" -> registry=index.docker.io repo=library/alpine tag=3.22 bytes=253..264
+Dockerfile:15 dockerfile-copy-from "builder" UNRESOLVED (refers to an earlier build stage, not an image)
+Dockerfile:16 dockerfile-copy-from "busybox:1.37" -> registry=index.docker.io repo=library/busybox tag=1.37 bytes=325..337
+Dockerfile:17 dockerfile-copy-from "0" UNRESOLVED (refers to an earlier build stage, not an image)
