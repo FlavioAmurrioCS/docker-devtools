@@ -1,0 +1,216 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+---
+name: main
+
+on:
+  push:
+    branches: [main, test-me-*]
+    tags: ["*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      # v9 moved the action to node24; v8 runs on the deprecated node20.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # hatch-vcs derives the version from tags
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --group type-checkers
+      - run: uv run pytest tests
+      - run: uv run mypy
+      - run: uv run ty check
+      - run: uv run pyrefly check
+      - run: uv run pyright
+      - run: uv run basedpyright
+
+  completions:
+    name: completions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@v3
+        with:
+          tool_versions: |
+            usage latest
+      # kong has no completion of its own, so the binary emits a usage spec and
+      # the usage CLI turns it into scripts. If that pipeline breaks, tab
+      # completion silently stops working for everyone.
+      - run: ./scripts/completions.sh
+
+  wheels:
+    name: wheel (${{ matrix.target }})
+    needs: [go, python]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - linux-amd64
+          - linux-arm64
+          - linux-amd64-musl
+          - linux-arm64-musl
+          - darwin-amd64
+          - darwin-arm64
+          - windows-amd64
+          - windows-arm64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      # CGO is off, so every target cross-compiles from this one runner.
+      - run: uv build --wheel --out-dir dist
+        env:
+          DDT_TARGET: ${{ matrix.target }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist/*.whl
+
+  sdist:
+    name: sdist
+    needs: [go, python]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build --sdist --out-dir dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  binaries:
+    name: binary (${{ matrix.target }})
+    # Only the tag-only release job consumes these, and on a branch the version
+    # would read "main". The wheels matrix already cross-compiles every target
+    # on each push, so nothing is lost by skipping this one.
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: [go]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { target: linux-amd64, goos: linux, goarch: amd64 }
+          - { target: linux-arm64, goos: linux, goarch: arm64 }
+          - { target: darwin-amd64, goos: darwin, goarch: amd64 }
+          - { target: darwin-arm64, goos: darwin, goarch: arm64 }
+          - { target: windows-amd64, goos: windows, goarch: amd64 }
+          - { target: windows-arm64, goos: windows, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="docker-devtools"
+          [ "$GOOS" = windows ] && name="$name.exe"
+          mkdir -p out
+          go build -trimpath -ldflags "-s -w -X main.version=${version}" \
+            -o "out/$name" ./cmd/docker-devtools
+          tar -czf "docker-devtools-${{ matrix.target }}.tar.gz" -C out "$name"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.target }}
+          path: "*.tar.gz"
+
+  publish-to-pypi:
+    name: upload release to PyPI
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # mandatory for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "{wheel-*,sdist}"
+          merge-multiple: true
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: sign and publish a GitHub release
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: [wheels, sdist, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # mandatory for making GitHub Releases
+      id-token: write # mandatory for sigstore
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "{wheel-*,sdist}"
+          merge-multiple: true
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          merge-multiple: true
+          path: binaries/
+      - name: Checksum the binaries
+        run: cd binaries && sha256sum ./*.tar.gz > SHA256SUMS
+      - uses: sigstore/gh-action-sigstore-python@v3.5.0
+        with:
+          inputs: >-
+            ./dist/*.tar.gz
+            ./dist/*.whl
+      - name: Create the release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create '${{ github.ref_name }}'
+          --repo '${{ github.repository }}'
+          --generate-notes
+      - name: Upload the artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          gh release upload '${{ github.ref_name }}' dist/** binaries/**
+          --repo '${{ github.repository }}'

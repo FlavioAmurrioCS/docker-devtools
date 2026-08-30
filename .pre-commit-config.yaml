@@ -1,0 +1,201 @@
+# yaml-language-server: $schema=https://www.schemastore.org/pre-commit-config.json
+---
+# Run with: mise run lint
+ci:
+  skip:
+    # Anything that needs a mise-managed toolchain or a project virtualenv.
+    - uv-lock
+    - go-fmt
+    - go-lint
+    - go-test
+    - taplo-format
+    - taplo-lint
+    - shellcheck
+    - shfmt
+    - vale-prose
+    - uv-mypy
+    - uv-ty
+    - uv-pyrefly
+    - uv-zuban
+    - uv-pyright
+    - uv-basedpyright
+    - uv-test
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      # This tool exists partly because build contexts leak secrets. It would
+      # be a poor advertisement to leak one here.
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: debug-statements
+      - id: end-of-file-fixer
+        # Golden files are compared byte for byte, so a fixer must not touch
+        # them; the generator already ends them with a newline.
+        exclude: ^testdata/.*\.golden$
+      - id: name-tests-test
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: ^testdata/
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.16
+    hooks:
+      - id: uv-lock
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff-check
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        args: [--fix, --unsafe-fixes]
+      - id: ruff-format
+        types_or: [python, pyi]
+        exclude: ^testdata/
+
+  # rumdl publishes aarch64 wheels for both glibc and musl, so the upstream
+  # hook installs everywhere, including the arm64 fresh-clone container. That
+  # is why this one stays a normal remote hook while taplo needed mise.
+  - repo: https://github.com/rvben/rumdl-pre-commit
+    rev: v0.2.62
+    hooks:
+      - id: rumdl
+        args: [--fix]
+      - id: rumdl-fmt
+
+  # Go and shell tooling runs from the mise-pinned binaries. The upstream
+  # shellcheck hook runs inside Docker, which would make Docker a requirement
+  # for committing and break anywhere it is unavailable.
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: mise x -- golangci-lint fmt
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-lint
+        name: golangci-lint
+        entry: mise x -- golangci-lint run
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-test
+        name: go test
+        entry: mise x -- go test ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: taplo-format
+        name: taplo format
+        entry: mise x -- taplo format
+        language: system
+        types: [toml]
+
+      - id: taplo-lint
+        name: taplo lint
+        entry: mise x -- taplo lint
+        language: system
+        types: [toml]
+
+      - id: shellcheck
+        name: shellcheck
+        entry: mise x -- shellcheck
+        language: system
+        types: [shell]
+
+      - id: shfmt
+        name: shfmt
+        entry: mise x -- shfmt -i 2 -ci -w
+        language: system
+        types: [shell]
+
+  - repo: local
+    hooks:
+      # Prose linting with vale-ai-tells. Runs only on changed markdown, so the
+      # backlog does not block unrelated commits.
+      - id: vale-prose
+        name: vale (ai-tells) on changed markdown
+        entry: scripts/prose-lint.sh
+        language: script
+        files: \.md$
+        exclude: ^\.vale-
+        pass_filenames: true
+
+      - id: vale-commit-msg
+        name: vale (ai-tells-commits) on the commit message
+        entry: scripts/commit-msg-lint.sh
+        language: script
+        stages: [commit-msg]
+        always_run: true
+        pass_filenames: true
+
+  - repo: local
+    hooks:
+      - id: uv-mypy
+        name: uv-mypy
+        entry: env VIRTUAL_ENV= uv run mypy
+        language: python
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        require_serial: true
+        additional_dependencies: [uv]
+      - id: uv-ty
+        name: uv-ty
+        entry: env VIRTUAL_ENV= uv run --group=type-checkers ty check
+        language: python
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        require_serial: true
+        additional_dependencies: [uv]
+      - id: uv-pyrefly
+        name: uv-pyrefly
+        entry: env VIRTUAL_ENV= uv run --group=type-checkers pyrefly check
+        language: python
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        require_serial: true
+        additional_dependencies: [uv]
+      - id: uv-zuban
+        name: uv-zuban
+        entry: env VIRTUAL_ENV= uv run --group=type-checkers zuban check
+        language: python
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        require_serial: true
+        additional_dependencies: [uv]
+      - id: uv-pyright
+        name: uv-pyright
+        entry: env VIRTUAL_ENV= uv run --group=type-checkers pyright
+        language: python
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        require_serial: true
+        additional_dependencies: [uv]
+      - id: uv-basedpyright
+        name: uv-basedpyright
+        entry: env VIRTUAL_ENV= uv run --group=type-checkers basedpyright
+        language: python
+        types_or: [python, pyi]
+        exclude: ^testdata/
+        require_serial: true
+        additional_dependencies: [uv]
+      - id: uv-test
+        name: uv-test
+        entry: env VIRTUAL_ENV= uv run pytest
+        language: python
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        additional_dependencies: [uv]
