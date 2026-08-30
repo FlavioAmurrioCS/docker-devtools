@@ -41,10 +41,16 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
 ## The delicate parts
 
 - `internal/imgref` decides what counts as an image. A stage name, a stage
-  index, `scratch`, and anything built from an `ARG` are all reported as
-  unresolved rather than guessed at. `TestByteRangesLandOnTheReference` is the
-  safety net: every resolved reference's byte range must contain exactly its
-  own text.
+  index and `scratch` are reported as unresolved rather than guessed at.
+  `TestByteRangesLandOnTheReference` is the safety net: every resolved
+  reference's byte range must contain exactly its own text.
+- A `FROM` behind a meta `ARG` is expanded with buildkit's own `shell.Lex`, the
+  way `dockerfile2llb` does it, and anchored on the ARG line. The rule that
+  keeps this safe is the byte-range invariant above, not a special case: the
+  expansion must appear verbatim on an ARG line, so `ARG BASE=debian:13-slim`
+  resolves and `ARG VERSION=12` with `FROM debian:${VERSION}-slim` does not.
+  One ARG may back several `FROM`s, so the reference is emitted once; two edits
+  over one range would reach `rewrite.Apply`, which is right to reject them.
 - `internal/imgupdate` holds the tag policy. `same-pattern` moves only the last
   version component and never changes the suffix, because `-alpine` and `-slim`
   are different images. `TestSelectTagNeverChangesSuffix` pins that for every
@@ -65,6 +71,17 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
 - We conform to BuildKit, not the legacy builder. `docker build` forwards to
   buildx by default (docker/cli `cmd/docker/builder.go`), and the legacy builder
   never supported `<dockerfile>.dockerignore` at all.
+
+`internal/registry` authenticates through `authn.DefaultKeychain`, which already
+covers `config.json` and its `credsStore`/`credHelpers` shell-outs,
+`$REGISTRY_AUTH_FILE` and podman's `auth.json`. `netrc.go` sits behind it in a
+`MultiKeychain`, so a `docker login` always beats a stale netrc entry.
+
+Tag ordering lives in `internal/imgupdate`, not in the command: the OCI
+distribution spec requires the registry to return tags lexically and carries no
+timestamps, so `SortTags` is the only ordering there is. Do not add a
+publication-date sort. It costs three requests per tag, and reproducible builds
+set the date to the epoch.
 
 Registry tests use `go-containerregistry`'s in-process registry
 (`pkg/registry`) with synthetic images (`pkg/v1/random`). Add tests there rather

@@ -11,7 +11,10 @@ import (
 
 // ImageCmd groups the commands that work on image references.
 type ImageCmd struct {
-	Ls     ImageLsCmd     `cmd:"" aliases:"list" help:"List every image reference, with the file and line it sits on."`
+	// default:"withargs" so "image-refs Dockerfile" means "image-refs ls
+	// Dockerfile". The cost is that a mistyped verb reads as a path:
+	// "image-refs updte" reports "stat updte: no such file or directory".
+	Ls     ImageLsCmd     `cmd:"" aliases:"list" default:"withargs" help:"List every image reference, with the file and line it sits on."`
 	Update ImageUpdateCmd `cmd:"" help:"Rewrite image references in place."`
 }
 
@@ -33,8 +36,10 @@ func (c *ImageLsCmd) Run(st *Streams) error {
 	if c.JSON {
 		return writeJSON(st.Stdout, res)
 	}
+	hidden := 0
 	for _, r := range res.Refs {
 		if !r.Resolved && !c.Unresolved {
+			hidden++
 			continue
 		}
 		fmt.Fprintf(st.Stdout, "%s:%d\t%s", r.Path, r.Line, r.Raw)
@@ -42,6 +47,12 @@ func (c *ImageLsCmd) Run(st *Streams) error {
 			fmt.Fprintf(st.Stdout, "\t(%s)", r.Note)
 		}
 		fmt.Fprintln(st.Stdout)
+	}
+	// Without this a file whose every reference is unresolved simply vanishes
+	// from the listing, with nothing to suggest it was read at all.
+	if hidden > 0 {
+		fmt.Fprintf(st.Stderr, "%s not resolved; pass --unresolved to see them\n",
+			plural(int64(hidden), "reference"))
 	}
 	return nil
 }

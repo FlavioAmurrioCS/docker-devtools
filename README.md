@@ -98,9 +98,14 @@ the `docker-devtools` it puts on PATH.
 docker-devtools build-context ls [PATH]      list the files Docker would send
 docker-devtools image-refs ls [PATH...]      list every image reference, with file and line
 docker-devtools image-refs update [PATH...]  rewrite references in place
+docker-devtools registry tags REF            list a repository's tags, newest last
 docker-devtools install-docker-plugin        register as "docker devtools"
 docker-devtools version                      print the version (also --version)
 ```
+
+Each group's `ls` is also the default, so `image-refs Dockerfile` and
+`build-context .` work without it. The cost is that a mistyped verb reads as a
+path: `image-refs updte` reports `stat updte: no such file or directory`.
 
 `ls` is also spelled `list`. The groups are named away from `context` and
 `image` on purpose: `docker context ls` lists CLI endpoints and `docker image ls`
@@ -182,6 +187,25 @@ still rewrites the files and then exits non-zero. Pair it with `--dry-run` for a
 check that leaves the tree alone, which is what the `docker-image-check` hook
 does.
 
+### Base images behind an ARG
+
+A Dockerfile that opens `ARG BASE_IMAGE=debian:13-slim` and then
+`FROM "${BASE_IMAGE}"` still has a real base image, and it is updatable. The
+`FROM` is expanded through the ARG defaults with BuildKit's own lexer, the same
+way `docker build` does it, and the reference is reported on the **ARG** line,
+because that is the only text an update can rewrite:
+
+```console
+$ docker-devtools image-refs ls --unresolved
+Dockerfile:1   debian:13-slim
+Dockerfile:5   "${BASE_IMAGE}"   (resolved from ARG BASE_IMAGE on line 1)
+```
+
+This holds only when the ARG default is the whole reference, spelled out on its
+own line. `ARG VERSION=12` with `FROM debian:${VERSION}-slim` stays unresolved:
+the image is `debian:12-slim`, which is written nowhere, and rewriting would
+mean splicing a bare tag into the middle of a line.
+
 ### What it will not touch
 
 Some references cannot be resolved to an image, and those are reported rather
@@ -189,9 +213,13 @@ than guessed at. Pass `--unresolved` to `image-refs ls` to see them:
 
 - `FROM builder`, where `builder` is an earlier stage
 - `COPY --from=0`, which indexes a stage
-- `FROM $BASE`, which depends on a build argument
+- `FROM $BASE` where the ARG has no default, or supplies only part of the
+  reference
 - `FROM scratch`, which is the empty base rather than a registry image
 - Compose values built from variables, such as `${REGISTRY}/app:latest`
+
+A listing says how many it withheld, so a file whose every reference is one of
+these does not simply vanish from the output.
 
 ### Editing in place
 
@@ -212,6 +240,34 @@ becomes
 If a byte range no longer holds the text the parse said it held, the update
 fails instead of writing. A rewrite that has drifted from the parse is a bug,
 and corrupting the file would hide it.
+
+## Listing tags
+
+```console
+$ docker-devtools registry tags python:3.12-slim
+  3.11-slim
+* 3.12-slim
+  3.13-slim
+  3.14-slim
+```
+
+Given a tag, the listing keeps only tags sharing its suffix and marks the one
+you named, so it answers what that reference could move to. `-alpine` and
+`-slim` stay apart for the same reason no policy crosses between them. Pass
+`--all` for everything, and `--json` to script against.
+
+The ordering is computed here, not taken from the registry. The OCI
+distribution spec requires the tags endpoint to return
+"lexical (i.e. case-insensitive alphanumeric order)" and carries no timestamps,
+which is the order that puts `3.10` before `3.9`. There is no portable way to
+sort by publication date: reading one costs three requests per tag and is
+meaningless for reproducible builds, which set it to the epoch. `--sort lexical`
+hands the registry's own order back.
+
+Credentials come from `~/.docker/config.json`, including the `credsStore` and
+`credHelpers` entries that shell out to `docker-credential-*`, and from
+`$DOCKER_CONFIG`, `$REGISTRY_AUTH_FILE` and Podman's `containers/auth.json`.
+Behind all of those, `~/.netrc` is consulted, or `$NETRC` when it is set.
 
 ## Shell completion
 

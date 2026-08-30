@@ -14,7 +14,7 @@ import (
 // dctx package, whose output scripts/conformance.sh diffs against a real
 // docker build for every fixture.
 type ContextCmd struct {
-	Ls ContextLsCmd `cmd:"" aliases:"list" help:"List the files Docker sends as the build context."`
+	Ls ContextLsCmd `cmd:"" aliases:"list" default:"withargs" help:"List the files Docker sends as the build context."`
 }
 
 type ContextLsCmd struct {
