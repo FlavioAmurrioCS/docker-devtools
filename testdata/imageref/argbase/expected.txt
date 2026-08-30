@@ -1,0 +1,5 @@
+Dockerfile:3 dockerfile-arg "debian:13-slim" -> registry=index.docker.io repo=library/debian tag=13-slim bytes=151..165
+Dockerfile:13 dockerfile-from "\"${BASE_IMAGE}\"" stage=first UNRESOLVED (resolved from ARG BASE_IMAGE on line 3)
+Dockerfile:18 dockerfile-from "${BASE_IMAGE}" stage=second UNRESOLVED (resolved from ARG BASE_IMAGE on line 3)
+Dockerfile:21 dockerfile-from "debian:${DEBIAN_VERSION}-slim" stage=fragment UNRESOLVED (depends on a build argument)
+Dockerfile:24 dockerfile-from "${UNSET_IMAGE}" stage=unset UNRESOLVED (depends on a build argument)

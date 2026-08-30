@@ -23,15 +23,24 @@ func FileKind(path string) Kind {
 	// "unknown instruction: node_modules" for a perfectly valid file.
 	case strings.HasSuffix(base, ".dockerignore"), base == ".dockerignore":
 		return ""
-	case base == "Dockerfile" || base == "dockerfile" || base == "Containerfile":
+	case strings.EqualFold(base, "Dockerfile"), strings.EqualFold(base, "Containerfile"):
 		return KindDockerfileFrom
-	case strings.HasPrefix(base, "Dockerfile."), strings.HasSuffix(base, ".Dockerfile"):
+	// Both spellings get both affixes, and both compare case-insensitively:
+	// "dockerfile.dev" and "api.Containerfile" are as much Dockerfiles as
+	// "Dockerfile.dev" is.
+	case hasAffix(base, "Dockerfile"), hasAffix(base, "Containerfile"):
 		return KindDockerfileFrom
 	case composeName.MatchString(base):
 		return KindComposeImage
 	default:
 		return ""
 	}
+}
+
+// hasAffix reports whether base is "<name>.<something>" or "<something>.<name>".
+func hasAffix(base, name string) bool {
+	lower, lname := strings.ToLower(base), strings.ToLower(name)
+	return strings.HasPrefix(lower, lname+".") || strings.HasSuffix(lower, "."+lname)
 }
 
 // skipDir names directories never worth walking into.

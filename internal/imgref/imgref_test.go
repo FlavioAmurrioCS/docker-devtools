@@ -126,11 +126,16 @@ func TestStageReferencesAreNotImages(t *testing.T) {
 
 func TestFileKind(t *testing.T) {
 	cases := map[string]Kind{
-		"Dockerfile":          KindDockerfileFrom,
-		"dockerfile":          KindDockerfileFrom,
-		"Containerfile":       KindDockerfileFrom,
-		"Dockerfile.pinned":   KindDockerfileFrom,
-		"api.Dockerfile":      KindDockerfileFrom,
+		"Dockerfile":        KindDockerfileFrom,
+		"dockerfile":        KindDockerfileFrom,
+		"Containerfile":     KindDockerfileFrom,
+		"Dockerfile.pinned": KindDockerfileFrom,
+		"api.Dockerfile":    KindDockerfileFrom,
+		// Both spellings take both affixes, case-insensitively.
+		"dockerfile.dev":      KindDockerfileFrom,
+		"Containerfile.dev":   KindDockerfileFrom,
+		"api.Containerfile":   KindDockerfileFrom,
+		"containerfile":       KindDockerfileFrom,
 		"compose.yaml":        KindComposeImage,
 		"compose.yml":         KindComposeImage,
 		"docker-compose.yaml": KindComposeImage,
