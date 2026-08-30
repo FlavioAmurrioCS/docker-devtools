@@ -1,0 +1,8 @@
+dockerfile: we%ird
+ignorefile: we%ird.dockerignore
+included:   3 files, 29 bytes
+ignored:    not counted
+--
++ we%ird
++ we%ird.dockerignore
++ yes

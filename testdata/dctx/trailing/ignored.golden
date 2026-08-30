@@ -1,0 +1,9 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   3 files, 31 bytes
+ignored:    2 files, 4 bytes
+--
+- build  <- .dockerignore:1 build
+- build/out.bin  <- .dockerignore:1 build
+- build/sub  <- .dockerignore:1 build
+- build/sub/deep.bin  <- .dockerignore:1 build

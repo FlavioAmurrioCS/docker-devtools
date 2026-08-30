@@ -7,12 +7,12 @@ import (
 	"io"
 	"strings"
 
-	"github.com/FlavioAmurrioCS/docker-build-context/dctx"
+	"github.com/FlavioAmurrioCS/docker-devtools/dctx"
 )
 
-// ContextCmd groups the build-context commands. The listing logic lives in
-// docker-build-context, which owns the conformance suite that checks it
-// against a real docker build.
+// ContextCmd groups the build-context commands. The listing itself is in the
+// dctx package, whose output scripts/conformance.sh diffs against a real
+// docker build for every fixture.
 type ContextCmd struct {
 	Ls      ContextLsCmd      `cmd:"" help:"List the files Docker sends as the build context."`
 	Explain ContextExplainCmd `cmd:"" help:"Show which .dockerignore rule decided a path."`

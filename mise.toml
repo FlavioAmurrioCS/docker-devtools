@@ -47,6 +47,10 @@ run = "pre-commit run --all-files"
 description = "Lint all prose with vale-ai-tells"
 run = "./scripts/prose-lint.sh"
 
+[tasks.conformance]
+description = "Diff the context listing against what docker build really sends"
+run = "./scripts/conformance.sh"
+
 [tasks.completions]
 description = "Generate shell completions from the CLI's own usage spec"
 run = "./scripts/completions.sh"

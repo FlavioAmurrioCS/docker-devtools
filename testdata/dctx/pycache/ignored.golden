@@ -1,0 +1,10 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   5 files, 50 bytes
+ignored:    2 files, 12 bytes
+--
+- a/b/__pycache__  <- .dockerignore:1 **/__pycache__
+- a/b/__pycache__/x  <- .dockerignore:1 **/__pycache__
+- a/b/__pycache__/x/y.pyc  <- .dockerignore:1 **/__pycache__
+- pkg/__pycache__  <- .dockerignore:1 **/__pycache__
+- pkg/__pycache__/mod.pyc  <- .dockerignore:1 **/__pycache__

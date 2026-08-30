@@ -1,0 +1,6 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   5 files, 44 bytes
+ignored:    1 files, 2 bytes
+--
+- CHANGELOG.md  <- .dockerignore:1 *.md

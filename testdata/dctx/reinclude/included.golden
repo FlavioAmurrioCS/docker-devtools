@@ -1,0 +1,11 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   4 files, 60 bytes
+ignored:    not counted
+--
++ .dockerignore
++ Dockerfile
++ app.js
+M node_modules  <- .dockerignore:1 node_modules
++ node_modules/keep  <- .dockerignore:2 !node_modules/keep
++ node_modules/keep/index.js  <- .dockerignore:2 !node_modules/keep
