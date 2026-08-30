@@ -59,6 +59,12 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
   writes to disk.
 - `dctx` is the one package here with a public import path, because the walker
   is worth reusing on its own. Treat its exported names as API.
+- A Dockerfile is required. `Dockerfile` then lowercase `dockerfile` is the whole
+  candidate set, matching buildkit's `frontend/dockerui`; there is deliberately
+  no `Containerfile` fallback, even though `imgref.FileKind` accepts that name.
+  What docker opens by default and what is worth scanning are different
+  questions. A context with no ignore file warns rather than failing: the
+  listing is still true, it is just the whole tree.
 - `-f` is a path resolved from the working directory, not from the context, and
   the ignore file is the one beside the Dockerfile. That is docker's rule, stated
   outright in docker/cli `cli/command/image/build/context.go`, and produced by

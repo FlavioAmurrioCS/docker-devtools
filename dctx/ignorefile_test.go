@@ -1,6 +1,7 @@
 package dctx
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -56,9 +57,56 @@ func TestPerDockerfileIgnoreFileWins(t *testing.T) {
 		t.Errorf("ignore file = %q, want Prj1.dockerignore", f.Name)
 	}
 
-	// With no -f, the default Dockerfile is absent here, so .dockerignore wins.
-	if f := resolve(t, dir, ""); f.Name != ".dockerignore" {
+	// With no -f the default Dockerfile applies, and its ignore file is absent
+	// there, so the context root's .dockerignore wins.
+	pycache := filepath.Join("..", "testdata", "dctx", "pycache", "context")
+	if f := resolve(t, pycache, ""); f.Name != ".dockerignore" {
 		t.Errorf("ignore file = %q, want .dockerignore", f.Name)
+	}
+}
+
+func TestDefaultDockerfileMustExist(t *testing.T) {
+	// docker build refuses a context with no Dockerfile, so a listing of one
+	// describes a build that cannot run. The -f path already held to this;
+	// leaving the default lax let "build-context ls" report a whole repository
+	// as if it were a build context.
+	dir := filepath.Join("..", "testdata", "dctx", "perdockerfile", "context")
+
+	_, err := ResolveDockerfile(dir, "")
+	if err == nil {
+		t.Fatal("ResolveDockerfile() = nil error, want a failure with no Dockerfile")
+	}
+	if !strings.Contains(err.Error(), "pass -f") {
+		t.Errorf("error = %v, want it to name the way out", err)
+	}
+
+	// The lowercase spelling still satisfies it, and is the only other
+	// candidate: buildkit has no Containerfile fallback.
+	lower := filepath.Join("..", "testdata", "dctx", "lowercase", "context")
+	if _, err := ResolveDockerfile(lower, ""); err != nil {
+		t.Errorf("ResolveDockerfile() = %v, want the lowercase spelling accepted", err)
+	}
+}
+
+func TestWalkWarnsWhenNothingIsIgnored(t *testing.T) {
+	// No ignore file means the listing is the whole tree, which is the reason
+	// .git and a virtualenv turn up in what looks like a build context.
+	none := filepath.Join("..", "testdata", "dctx", "none", "context")
+	res, err := Walk(context.Background(), Options{Context: none})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "every file is sent") {
+		t.Errorf("warnings = %q, want one about the missing ignore file", res.Warnings)
+	}
+
+	pycache := filepath.Join("..", "testdata", "dctx", "pycache", "context")
+	res, err = Walk(context.Background(), Options{Context: pycache})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 0 {
+		t.Errorf("warnings = %q, want none when an ignore file is present", res.Warnings)
 	}
 }
 

@@ -129,7 +129,21 @@ takes:
 -0, --zero        separate paths with NUL
 ```
 
-### Which .dockerignore applies
+### Which Dockerfile, and which .dockerignore
+
+A context needs a Dockerfile. With no `-f`, `Dockerfile` is looked for and then
+the lowercase `dockerfile`, which is the whole candidate set BuildKit uses;
+there is no `Containerfile` fallback. When neither is there the command fails,
+because `docker build` would too, and a listing of a build that cannot run
+describes nothing.
+
+A context with no `.dockerignore` at all says so, since that is the reason
+`.git` and a virtualenv turn up in the listing:
+
+```console
+$ docker-devtools build-context ls
+warning: no .dockerignore in .; every file is sent
+```
 
 `-f` takes a path, resolved from your working directory rather than from the
 context. That is the rule `docker build -f` follows, and the Dockerfile may sit

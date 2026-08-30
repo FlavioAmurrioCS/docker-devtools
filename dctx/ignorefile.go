@@ -90,8 +90,17 @@ func ResolveDockerfile(contextDir, flagValue string) (DockerfileRef, error) {
 	}
 
 	if flagValue == "" {
+		// The default must be there, as it must for docker build, which fails
+		// with "failed to read dockerfile: open Dockerfile: no such file or
+		// directory". Listing a context for a build that cannot run describes
+		// nothing, and the -f path already holds to this rule.
 		name := lowercaseFallback(contextDir, DefaultDockerfileName)
-		return DockerfileRef{Path: filepath.Join(contextDir, name), Display: name}, nil
+		path := filepath.Join(contextDir, name)
+		if !statOK(path) {
+			return DockerfileRef{}, fmt.Errorf(
+				"no %s in %s; pass -f to name one", DefaultDockerfileName, givenContext)
+		}
+		return DockerfileRef{Path: path, Display: name}, nil
 	}
 
 	abs, err := filepath.Abs(flagValue)
@@ -122,6 +131,12 @@ func ResolveDockerfile(contextDir, flagValue string) (DockerfileRef, error) {
 // lowercaseFallback returns "dockerfile" when dir holds that spelling and not
 // "Dockerfile" (moby/moby#10858). Any other name is returned untouched, which
 // is the same guard buildx and the frontend both apply.
+//
+// Those two spellings are the whole candidate set, because they are all
+// buildkit looks for (frontend/dockerui: DefaultDockerfileName plus the
+// lowercase form). There is deliberately no Containerfile fallback here even
+// though imgref.FileKind accepts the name: what docker opens by default and
+// what is worth scanning for references are different questions.
 //
 // Candidates are compared against the directory listing rather than stat'ed, so
 // the answer does not depend on whether the filesystem is case-sensitive.
