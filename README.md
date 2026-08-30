@@ -27,11 +27,13 @@ Where the semantics are Docker's, this defers to Docker's own code:
 | Parse Dockerfiles | `moby/buildkit/frontend/dockerfile/parser` and `instructions` |
 | Parse image references | `google/go-containerregistry/pkg/name` |
 | Talk to registries | `google/go-containerregistry/pkg/v1/remote` |
-| List a build context | [`docker-build-context`](https://github.com/FlavioAmurrioCS/docker-build-context) |
+| Match .dockerignore rules | `moby/patternmatcher` |
+| Walk a build context | `tonistiigi/fsutil`, the package BuildKit sends contexts with |
 
-The build context half is a separate tool with its own conformance suite, which
-diffs its output against a real `docker build` for every fixture. This repo
-imports that package rather than reimplementing it.
+None of the `.dockerignore` semantics are reimplemented here, and CI checks
+that rather than asserting it: for every fixture, `scripts/conformance.sh`
+builds `FROM scratch` with `COPY . /`, exports the image as a tarball, and
+diffs the tar members against what `context ls` reports.
 
 ## Install
 
@@ -180,6 +182,7 @@ rewrite a repository.
 $ mise run build         # compile into ./build
 $ mise run test          # go test + pytest
 $ mise run lint          # pre-commit across the repo
+$ mise run conformance   # diff context listing against real docker build
 $ mise run completions   # regenerate completions and docs
 $ mise run wheels        # every platform wheel into ./dist
 $ mise run test-clone    # verify a fresh clone in a container

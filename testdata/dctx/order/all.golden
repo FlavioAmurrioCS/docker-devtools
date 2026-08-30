@@ -1,0 +1,12 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   5 files, 44 bytes
+ignored:    1 files, 2 bytes
+--
++ .dockerignore
+- CHANGELOG.md  <- .dockerignore:1 *.md
++ Dockerfile
++ README.md  <- .dockerignore:2 !README.md
++ docs
++ docs/guide.md
++ main.go

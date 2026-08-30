@@ -1,0 +1,8 @@
+dockerfile: Dockerfile
+ignorefile: 
+included:   3 files, 26 bytes
+ignored:    not counted
+--
++ Dockerfile
++ a.txt
++ b.txt

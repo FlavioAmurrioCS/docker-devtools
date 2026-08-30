@@ -9,26 +9,33 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
 ## Hard rules
 
 1. **Never reimplement what Docker already defines.** Dockerfile parsing comes
-   from `moby/buildkit`, image reference parsing and registry access from
-   `google/go-containerregistry`, and build context listing from the `dctx`
-   package in `FlavioAmurrioCS/docker-build-context`. If you find yourself
-   writing a Dockerfile parser or a reference parser, stop.
+   from `moby/buildkit`, image references and registry access from
+   `google/go-containerregistry`, and `.dockerignore` matching and context
+   walking from `moby/patternmatcher` and `tonistiigi/fsutil`. If you find
+   yourself writing a pattern matcher or a reference parser, stop.
 
-2. **Never re-encode a file to edit it.** `internal/rewrite` splices exact byte
+2. **`scripts/conformance.sh` is the source of truth for `dctx`.** It builds
+   each fixture with `FROM scratch` and `COPY . /`, exports the tarball, and
+   diffs the members against `context ls`. When it disagrees with a unit test,
+   the unit test is wrong. It is what caught the materialised-directory
+   behaviour that every other check missed. Run it after touching matching or
+   walking.
+
+3. **Never re-encode a file to edit it.** `internal/rewrite` splices exact byte
    ranges. A YAML round-trip reflows the document and drops comments, and
    regenerating a Dockerfile from its AST loses formatting. It is why each
    scanner records a byte offset for every reference, and why `compose-go` is
    not used: it resolves variables and validates, so what it returns no longer
    matches the bytes on disk.
 
-3. **A rewrite that cannot find what it expects must fail, not write.**
+4. **A rewrite that cannot find what it expects must fail, not write.**
    `rewrite.Apply` checks every range against the text the parse recorded. Drift
    between the two is a bug, and writing anyway would hide it inside a corrupted
    file.
 
-4. **Never run `git push`.** That decision belongs to a human, every time.
+5. **Never run `git push`.** That decision belongs to a human, every time.
 
-5. **Suggest the commit and wait.** One logical change per commit, named so
+6. **Suggest the commit and wait.** One logical change per commit, named so
    `git log --oneline` reads as a history.
 
 ## The delicate parts
@@ -44,6 +51,8 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
   policy.
 - `internal/rewrite` is small on purpose. Read it before changing anything that
   writes to disk.
+- `dctx` is the one package here with a public import path, because the walker
+  is worth reusing on its own. Treat its exported names as API.
 
 Registry tests use `go-containerregistry`'s in-process registry
 (`pkg/registry`) with synthetic images (`pkg/v1/random`). Add tests there rather
@@ -64,20 +73,6 @@ The generated scripts call back to `usage` at completion time, so users need it
 on PATH. `--usage-spec` is answered before
 kong parses anything, next to Docker's `docker-cli-plugin-metadata` handshake,
 because neither belongs in the command tree.
-
-## The docker-build-context dependency
-
-`go.mod` currently pins `FlavioAmurrioCS/docker-build-context` to a
-pseudo-version built from an unmerged branch, the one that moved `dctx` out of
-`internal` so this module could import it. Once that pull request is merged, repin:
-
-```sh
-go get github.com/FlavioAmurrioCS/docker-build-context@main
-go mod tidy
-```
-
-A release must not go out on a pseudo-version from a branch that may be
-rebased away.
 
 ## Schema versions
 

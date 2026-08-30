@@ -1,0 +1,13 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   5 files, 50 bytes
+ignored:    not counted
+--
++ .dockerignore
++ Dockerfile
++ a
++ a/b
++ a/b/keep.py
++ main.py
++ pkg
++ pkg/mod.py

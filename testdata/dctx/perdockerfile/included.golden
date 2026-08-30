@@ -1,0 +1,10 @@
+dockerfile: Prj1
+ignorefile: Prj1.dockerignore
+included:   5 files, 49 bytes
+ignored:    not counted
+--
++ .dockerignore
++ Prj1
++ Prj1.dockerignore
++ only-default
++ other

@@ -34,6 +34,18 @@ jobs:
         with:
           version: latest
 
+  conformance:
+    name: conformance against docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The check that makes the correctness claim testable: build each fixture
+      # for real, export the context tarball, diff the members.
+      - run: ./scripts/conformance.sh
+
   python:
     name: python
     runs-on: ubuntu-latest
@@ -72,7 +84,7 @@ jobs:
 
   wheels:
     name: wheel (${{ matrix.target }})
-    needs: [go, python]
+    needs: [go, python, conformance]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -104,7 +116,7 @@ jobs:
 
   sdist:
     name: sdist
-    needs: [go, python]
+    needs: [go, python, conformance]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
