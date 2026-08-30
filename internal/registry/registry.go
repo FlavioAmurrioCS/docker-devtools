@@ -28,10 +28,20 @@ type Remote struct {
 	opts []remote.Option
 }
 
-// New returns a Remote authenticating the way the docker CLI does.
+// New returns a Remote authenticating the way the docker CLI does, then falling
+// back to ~/.netrc.
+//
+// authn.DefaultKeychain already covers ~/.docker/config.json and with it the
+// credsStore and credHelpers entries that shell out to docker-credential-*,
+// plus $DOCKER_CONFIG, $REGISTRY_AUTH_FILE and podman's containers/auth.json
+// (pkg/authn/keychain.go). netrc goes behind it, so a docker login always wins
+// over a stale netrc entry.
 func New() *Remote {
 	return &Remote{opts: []remote.Option{
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithAuthFromKeychain(authn.NewMultiKeychain(
+			authn.DefaultKeychain,
+			authn.NewKeychainFromHelper(netrcHelper{}),
+		)),
 	}}
 }
 

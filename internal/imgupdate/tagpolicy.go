@@ -2,6 +2,7 @@ package imgupdate
 
 import (
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -150,4 +151,41 @@ func SelectTag(current string, available []string, policy Policy) string {
 		}
 	}
 	return best
+}
+
+// SortTags splits tags into the version-shaped ones, ordered oldest to newest,
+// and the rest in the order they arrived.
+//
+// The registry cannot do this for us. The OCI distribution spec requires the
+// tags endpoint to return "lexical (i.e. case-insensitive alphanumeric order)"
+// and carries no timestamps, which puts 3.10 before 3.9 and 2.6 before
+// 20190228. So ordering is computed here, from the same parse the policies use.
+//
+// Unversioned names -- latest, edge, bookworm -- have no ordering to be placed
+// in and are returned separately rather than sorted arbitrarily.
+func SortTags(tags []string) (versioned, unversioned []string) {
+	parsed := map[string]parsedTag{}
+	for _, t := range tags {
+		if p, ok := parseTag(t); ok {
+			parsed[t] = p
+			versioned = append(versioned, t)
+		} else {
+			unversioned = append(unversioned, t)
+		}
+	}
+	sort.SliceStable(versioned, func(i, j int) bool {
+		return newer(parsed[versioned[i]], parsed[versioned[j]])
+	})
+	return versioned, unversioned
+}
+
+// TagSuffix reports the non-numeric tail of a tag, such as "-slim", and whether
+// the tag has a version at all. A suffix is part of a tag's identity: -alpine
+// and -slim are different images, which is why no policy crosses between them.
+func TagSuffix(tag string) (string, bool) {
+	p, ok := parseTag(tag)
+	if !ok {
+		return "", false
+	}
+	return p.suffix, true
 }

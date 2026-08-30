@@ -40,6 +40,8 @@ type CLI struct {
 	Context ContextCmd `cmd:"" name:"build-context" help:"Inspect the build context a Dockerfile would send."`
 	Image   ImageCmd   `cmd:"" name:"image-refs" help:"Find and update the image references in a repository."`
 
+	Registry RegistryCmd `cmd:"" help:"Ask a registry about a repository."`
+
 	InstallDockerPlugin InstallPluginCmd `cmd:"" name:"install-docker-plugin" help:"Register this binary as the \"docker devtools\" plugin."`
 	Version             VersionCmd       `cmd:"" help:"Print the version."`
 
