@@ -1,0 +1,40 @@
+# Go
+/build/
+*.test
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# hatch-vcs writes this at build time
+_version.py
+
+# uv
+uv.lock
+requirements.txt
+
+# vale style packs are fetched by `vale sync`
+.vale-styles/
+.vale-commits/styles/
+.vale-commits/msg.md
+
+.DS_Store
+
+# The fixture contexts are the data under test. They deliberately contain
+# directories the rules above ignore (__pycache__, build/), because ignoring
+# those is exactly the behaviour being checked. Re-include everything under
+# testdata; the negation has to name the directories too, since git will not
+# descend into an excluded one.
+!/testdata/**

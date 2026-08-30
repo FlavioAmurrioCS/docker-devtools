@@ -1,0 +1,10 @@
+# Everything is LF in the working tree on every platform, so shell scripts and
+# Go sources are byte-identical wherever they are checked out.
+* text=auto eol=lf
+
+# Fixture contexts and golden files are data whose exact bytes are asserted: a
+# walk reports each file's size and the goldens record the totals. Git's
+# autocrlf adds a byte per line on Windows, which changed those totals and
+# failed every golden test there. Later patterns win, so this overrides the
+# rule above.
+testdata/** -text

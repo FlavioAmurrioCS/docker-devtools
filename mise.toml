@@ -1,0 +1,60 @@
+#:schema https://mise.en.dev/schema/mise.json
+
+[tools]
+# The Dockerfile parser comes from buildkit, which needs a recent toolchain.
+# Pin above it rather than tracking "latest", so a bump is a deliberate commit.
+go = "1.26"
+
+# uv backs the pipx: backend below, and builds the wheels.
+uv = "latest"
+
+# pipx, not the aqua zipapp: the zipapp shells out to a mise python3 shim to
+# build hook virtualenvs and fails on older Pythons. pipx brings its own.
+"pipx:pre-commit" = "latest"
+
+# usage turns the KDL spec this binary emits into shell completions, docs and
+# man pages. kong has no completion of its own; see AGENTS.md.
+usage = "latest"
+
+golangci-lint = "latest"
+gitleaks = "latest"
+shellcheck = "latest"
+shfmt = "latest"
+vale = "latest"
+
+# taplo from its release binaries, not the PyPI package: taplo publishes no
+# aarch64 Linux wheel, so the pre-commit hook falls back to the sdist and tries
+# to compile it with Rust. That breaks on arm64 Linux, which the fresh-clone
+# container is.
+taplo = "latest"
+
+[tasks.build]
+description = "Compile the binary into ./build"
+run = "go build -o build/docker-devtools ./cmd/docker-devtools"
+
+[tasks.test]
+description = "Run the Go and Python test suites"
+run = [
+  "go test ./...",
+  "uv run pytest tests",
+]
+
+[tasks.lint]
+description = "Run pre-commit across the repo"
+run = "pre-commit run --all-files"
+
+[tasks.prose]
+description = "Lint all prose with vale-ai-tells"
+run = "./scripts/prose-lint.sh"
+
+[tasks.completions]
+description = "Generate shell completions from the CLI's own usage spec"
+run = "./scripts/completions.sh"
+
+[tasks.wheels]
+description = "Build every platform wheel into ./dist"
+run = "./scripts/build-wheels.sh"
+
+[tasks.test-clone]
+description = "Verify a fresh clone sets up correctly, inside a container"
+run = "./scripts/test-fresh-clone.sh"
