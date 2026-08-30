@@ -32,6 +32,7 @@ type Explanation struct {
 	Status     Status        `json:"status"`
 	Exists     bool          `json:"exists"`
 	Rules      []MatchedRule `json:"rules"`
+	Warnings   []string      `json:"warnings,omitempty"`
 }
 
 // Explain reports which ignore-file rules apply to target and which one
@@ -42,6 +43,9 @@ type Explanation struct {
 func Explain(opt Options, target string) (*Explanation, error) {
 	contextDir, err := filepath.Abs(opt.Context)
 	if err != nil {
+		return nil, err
+	}
+	if err := CheckContextDir(contextDir); err != nil {
 		return nil, err
 	}
 
@@ -87,7 +91,7 @@ func Explain(opt Options, target string) (*Explanation, error) {
 		exists = false
 	}
 
-	return &Explanation{
+	exp := &Explanation{
 		Schema:     SchemaVersion,
 		Context:    contextDir,
 		Dockerfile: dockerfile,
@@ -96,7 +100,11 @@ func Explain(opt Options, target string) (*Explanation, error) {
 		Status:     statusOf(ignored),
 		Exists:     exists,
 		Rules:      rules,
-	}, nil
+	}
+	if warn := dockerfileWarning(contextDir, opt.Dockerfile, ignoreFile.Name); warn != "" {
+		exp.Warnings = append(exp.Warnings, warn)
+	}
+	return exp, nil
 }
 
 // relToContext normalizes target to a clean path relative to contextDir.

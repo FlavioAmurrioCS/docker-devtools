@@ -88,6 +88,52 @@ func ResolveDockerfile(contextDir, flagValue string) string {
 	return DefaultDockerfileName
 }
 
+// CheckContextDir rejects a context that is not a directory.
+//
+// Without it the first failure is whatever LoadIgnoreFile or fsutil reports:
+// "context ls path/to/Dockerfile" fails with
+// "open path/to/Dockerfile/Dockerfile.dockerignore: not a directory", naming a
+// file the caller never mentioned. docker build says "context must be a
+// directory", so say that.
+func CheckContextDir(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("context must be a directory: %s", dir)
+	}
+	return nil
+}
+
+// dockerfileWarning reports a Dockerfile that names neither a file in the
+// context nor an ignore file beside it, which is almost always a typo: the
+// listing falls back to ".dockerignore" and looks correct.
+//
+// It is a warning rather than an error because ResolveDockerfile documents that
+// the name need not exist -- a context can legitimately be listed without its
+// Dockerfile present, and only "<name>.dockerignore" is ever opened.
+func dockerfileWarning(contextDir, dockerfile, ignorefileName string) string {
+	if dockerfile == "" {
+		return ""
+	}
+	perDockerfile := dockerfile + ".dockerignore"
+	for _, candidate := range []string{dockerfile, perDockerfile} {
+		path := candidate
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(contextDir, path)
+		}
+		if _, err := os.Stat(path); err == nil {
+			return ""
+		}
+	}
+	used := ignorefileName
+	if used == "" {
+		used = "no ignore file"
+	}
+	return fmt.Sprintf("neither %s nor %s is in the context; using %s", dockerfile, perDockerfile, used)
+}
+
 // LoadIgnoreFile finds and parses the ignore file for a build.
 //
 // Candidates are tried in BuildKit's order: "<dockerfile>.dockerignore" first,

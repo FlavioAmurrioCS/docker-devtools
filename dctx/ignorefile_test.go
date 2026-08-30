@@ -1,8 +1,10 @@
 package dctx
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +111,51 @@ func TestMissingIgnoreFileIsNotAnError(t *testing.T) {
 	}
 	if f.Name != "" || len(f.Rules) != 0 {
 		t.Errorf("LoadIgnoreFile() = %#v, want an empty result", f)
+	}
+}
+
+func TestCheckContextDirRejectsAFile(t *testing.T) {
+	// "context ls path/to/Dockerfile" is the natural mistake, because the image
+	// commands do take file paths. Before this check it failed with
+	// "open .../Dockerfile/Dockerfile.dockerignore: not a directory", naming a
+	// path the caller never mentioned.
+	file := filepath.Join("..", "testdata", "dctx", "none", "context", "Dockerfile")
+	err := CheckContextDir(file)
+	if err == nil {
+		t.Fatal("CheckContextDir() = nil, want an error for a regular file")
+	}
+	if !strings.Contains(err.Error(), "context must be a directory") {
+		t.Errorf("CheckContextDir() = %v, want docker build's own wording", err)
+	}
+}
+
+func TestDockerfileWarningOnlyFiresForATypo(t *testing.T) {
+	// A Dockerfile need not exist for its ignore file to be used, and an ignore
+	// file need not exist for a context to be listed. Only when neither is
+	// there is the name almost certainly a typo.
+	dir := t.TempDir()
+	for _, name := range []string{"Dockerfile", "Ignoreonly.dockerignore"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		name       string
+		dockerfile string
+		want       bool
+	}{
+		{"auto-detected, nothing to warn about", "", false},
+		{"the Dockerfile is there", "Dockerfile", false},
+		{"only the ignore file is there", "Ignoreonly", false},
+		{"neither is there", "Dockerfle.typo", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dockerfileWarning(dir, tt.dockerfile, ".dockerignore")
+			if (got != "") != tt.want {
+				t.Errorf("dockerfileWarning(%q) = %q, want warning: %v", tt.dockerfile, got, tt.want)
+			}
+		})
 	}
 }

@@ -39,6 +39,11 @@ type CLI struct {
 
 	InstallDockerPlugin InstallPluginCmd `cmd:"" name:"install-docker-plugin" help:"Register this binary as the \"docker devtools\" plugin."`
 	Version             VersionCmd       `cmd:"" help:"Print the version."`
+
+	// The subcommand alone is not enough: --version is what people reach for
+	// first, and an unknown-flag error is a poor answer. kong.VersionFlag also
+	// puts it in --help and, through kong-usage, in the completions.
+	VersionFlag kong.VersionFlag `name:"version" short:"V" help:"Print the version and exit."`
 }
 
 type VersionCmd struct{}
@@ -111,6 +116,7 @@ func newParser(stdout, stderr io.Writer) (*kong.Kong, error) {
 	var cli CLI
 	return kong.New(&cli,
 		kong.Name(binaryName),
+		kong.Vars{"version": version},
 		kong.Description("Work on the Dockerfiles, Compose files and build context in a repository."),
 		kong.UsageOnError(),
 		kong.Writers(stdout, stderr),

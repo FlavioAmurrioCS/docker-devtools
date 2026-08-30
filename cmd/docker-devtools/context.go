@@ -21,7 +21,7 @@ type ContextCmd struct {
 type ContextLsCmd struct {
 	Path string `arg:"" optional:"" default:"." help:"Build context directory." type:"path"`
 
-	File    string `short:"f" placeholder:"NAME" help:"Dockerfile name, which also selects <name>.dockerignore."`
+	File    string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the context. Also selects <path>.dockerignore."`
 	Ignored bool   `xor:"mode" help:"List the excluded files instead of the included ones."`
 	All     bool   `xor:"mode" help:"List every file, prefixed + for sent and - for excluded."`
 	Size    bool   `help:"Prefix each path with its size in bytes."`
@@ -86,7 +86,7 @@ type ContextExplainCmd struct {
 	Path string `arg:"" help:"Path to explain, relative to the context or absolute. It need not exist."`
 
 	Dir  string `short:"C" default:"." placeholder:"DIR" help:"Build context directory." type:"path"`
-	File string `short:"f" placeholder:"NAME" help:"Dockerfile name, which also selects <name>.dockerignore."`
+	File string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the context. Also selects <path>.dockerignore."`
 	JSON bool   `name:"json" help:"Emit the explanation as JSON."`
 }
 
@@ -94,6 +94,9 @@ func (c *ContextExplainCmd) Run(st *Streams) error {
 	exp, err := dctx.Explain(dctx.Options{Context: c.Dir, Dockerfile: c.File}, c.Path)
 	if err != nil {
 		return err
+	}
+	for _, w := range exp.Warnings {
+		fmt.Fprintln(st.Stderr, "warning:", w)
 	}
 	if c.JSON {
 		return writeJSON(st.Stdout, exp)

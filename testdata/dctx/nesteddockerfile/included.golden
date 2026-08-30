@@ -1,0 +1,11 @@
+dockerfile: docker/Dockerfile.dev
+ignorefile: docker/Dockerfile.dev.dockerignore
+included:   5 files, 51 bytes
+ignored:    not counted
+--
++ .dockerignore
++ docker
++ docker/Dockerfile.dev
++ docker/Dockerfile.dev.dockerignore
++ only-default
++ other

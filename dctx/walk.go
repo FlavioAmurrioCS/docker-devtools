@@ -117,6 +117,9 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := CheckContextDir(contextDir); err != nil {
+		return nil, err
+	}
 
 	dockerfile := ResolveDockerfile(contextDir, opt.Dockerfile)
 	ignoreFile, err := LoadIgnoreFile(contextDir, dockerfile)
@@ -143,6 +146,9 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 			Ignorefile: ignoreFile.Name,
 			Entries:    []Entry{},
 		},
+	}
+	if warn := dockerfileWarning(contextDir, opt.Dockerfile, ignoreFile.Name); warn != "" {
+		w.res.Warnings = append(w.res.Warnings, warn)
 	}
 	if opt.Mode != ModeIncluded {
 		w.res.Summary.Ignored = &Counts{}
