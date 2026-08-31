@@ -24,6 +24,10 @@ const (
 	KindDockerfileFrom Kind = "dockerfile-from"
 	// KindDockerfileCopyFrom is a COPY --from=<image> source.
 	KindDockerfileCopyFrom Kind = "dockerfile-copy-from"
+	// KindDockerfileArg is an ARG default that a FROM resolves to. The
+	// reference is anchored on the ARG line, because that is the only text an
+	// update can rewrite: the FROM holds a variable, not an image.
+	KindDockerfileArg Kind = "dockerfile-arg"
 	// KindComposeImage is a Compose service's image: value.
 	KindComposeImage Kind = "compose-image"
 )

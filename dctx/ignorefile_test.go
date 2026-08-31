@@ -1,8 +1,10 @@
 package dctx
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -34,23 +36,117 @@ func TestParseRulesStripsBOM(t *testing.T) {
 	}
 }
 
-func TestPerDockerfileIgnoreFileWins(t *testing.T) {
-	dir := filepath.Join("..", "testdata", "dctx", "perdockerfile", "context")
-	f, err := LoadIgnoreFile(dir, "Prj1")
+// resolve is the two-step every caller does: locate the Dockerfile, then load
+// the ignore file derived from it.
+func resolve(t *testing.T, contextDir, flagValue string) *IgnoreFile {
+	t.Helper()
+	df, err := ResolveDockerfile(contextDir, flagValue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Name != "Prj1.dockerignore" {
+	f, err := LoadIgnoreFile(contextDir, df)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func TestPerDockerfileIgnoreFileWins(t *testing.T) {
+	dir := filepath.Join("..", "testdata", "dctx", "perdockerfile", "context")
+	if f := resolve(t, dir, filepath.Join(dir, "Prj1")); f.Name != "Prj1.dockerignore" {
 		t.Errorf("ignore file = %q, want Prj1.dockerignore", f.Name)
 	}
 
-	// With no -f, the default Dockerfile is absent here, so .dockerignore wins.
-	f, err = LoadIgnoreFile(dir, ResolveDockerfile(dir, ""))
+	// With no -f the default Dockerfile applies, and its ignore file is absent
+	// there, so the context root's .dockerignore wins.
+	pycache := filepath.Join("..", "testdata", "dctx", "pycache", "context")
+	if f := resolve(t, pycache, ""); f.Name != ".dockerignore" {
+		t.Errorf("ignore file = %q, want .dockerignore", f.Name)
+	}
+}
+
+func TestDefaultDockerfileMustExist(t *testing.T) {
+	// docker build refuses a context with no Dockerfile, so a listing of one
+	// describes a build that cannot run. The -f path already held to this;
+	// leaving the default lax let "build-context ls" report a whole repository
+	// as if it were a build context.
+	dir := filepath.Join("..", "testdata", "dctx", "perdockerfile", "context")
+
+	_, err := ResolveDockerfile(dir, "")
+	if err == nil {
+		t.Fatal("ResolveDockerfile() = nil error, want a failure with no Dockerfile")
+	}
+	if !strings.Contains(err.Error(), "pass -f") {
+		t.Errorf("error = %v, want it to name the way out", err)
+	}
+
+	// The lowercase spelling still satisfies it, and is the only other
+	// candidate: buildkit has no Containerfile fallback.
+	lower := filepath.Join("..", "testdata", "dctx", "lowercase", "context")
+	if _, err := ResolveDockerfile(lower, ""); err != nil {
+		t.Errorf("ResolveDockerfile() = %v, want the lowercase spelling accepted", err)
+	}
+}
+
+func TestWalkWarnsWhenNothingIsIgnored(t *testing.T) {
+	// No ignore file means the listing is the whole tree, which is the reason
+	// .git and a virtualenv turn up in what looks like a build context.
+	none := filepath.Join("..", "testdata", "dctx", "none", "context")
+	res, err := Walk(context.Background(), Options{Context: none})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Name != ".dockerignore" {
-		t.Errorf("ignore file = %q, want .dockerignore", f.Name)
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "every file is sent") {
+		t.Errorf("warnings = %q, want one about the missing ignore file", res.Warnings)
+	}
+
+	pycache := filepath.Join("..", "testdata", "dctx", "pycache", "context")
+	res, err = Walk(context.Background(), Options{Context: pycache})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 0 {
+		t.Errorf("warnings = %q, want none when an ignore file is present", res.Warnings)
+	}
+}
+
+func TestDockerfileFlagIsRelativeToTheWorkingDirectory(t *testing.T) {
+	// docker build resolves -f from the current directory, not the context
+	// (docker/cli cli/command/image/build/context.go). The fixture's Dockerfile
+	// sits outside its context, so a context-relative reading cannot find it
+	// and the two spellings give different answers.
+	dir := filepath.Join("..", "testdata", "dctx", "outofcontext")
+	ctxDir := filepath.Join(dir, "context")
+
+	// Reported relative to the working directory, because it is not in the
+	// context to be relative to.
+	want := filepath.ToSlash(filepath.Join(dir, "build.Dockerfile.dockerignore"))
+	f := resolve(t, ctxDir, filepath.Join(dir, "build.Dockerfile"))
+	if f.Name != want {
+		t.Errorf("ignore file = %q, want %q, the one beside the Dockerfile", f.Name, want)
+	}
+	if len(f.Rules) != 1 || f.Rules[0].Raw != "beside-only" {
+		t.Errorf("rules = %#v, want the out-of-context file's contents", f.Rules)
+	}
+}
+
+func TestExplicitDockerfileMustExist(t *testing.T) {
+	// docker build fails with "failed to read dockerfile: open ...: no such
+	// file or directory" rather than building something else.
+	dir := filepath.Join("..", "testdata", "dctx", "perdockerfile", "context")
+
+	if _, err := ResolveDockerfile(dir, filepath.Join(dir, "Nope")); err == nil {
+		t.Fatal("ResolveDockerfile() = nil error, want a failure for a missing -f")
+	}
+
+	// A value that resolves only inside the context is the pre-0.1 spelling.
+	// Failing is right, but the error has to say what to pass instead.
+	_, err := ResolveDockerfile(dir, "Prj1")
+	if err == nil {
+		t.Fatal("ResolveDockerfile() = nil error, want a failure for a context-relative -f")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(dir, "Prj1")) {
+		t.Errorf("error = %v, want it to name the path to pass instead", err)
 	}
 }
 
@@ -63,15 +159,15 @@ func TestResolveDockerfileAcceptsLowercase(t *testing.T) {
 	// listing instead of stat'ing each candidate.
 	dir := filepath.Join("..", "testdata", "dctx", "lowercase", "context")
 
-	got := ResolveDockerfile(dir, "")
-	if got != "dockerfile" {
-		t.Fatalf("ResolveDockerfile() = %q, want dockerfile", got)
-	}
-
-	f, err := LoadIgnoreFile(dir, got)
+	df, err := ResolveDockerfile(dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if df.Display != "dockerfile" {
+		t.Fatalf("ResolveDockerfile() = %q, want dockerfile", df.Display)
+	}
+
+	f := resolve(t, dir, "")
 	if f.Name != "dockerfile.dockerignore" {
 		t.Errorf("ignore file = %q, want dockerfile.dockerignore", f.Name)
 	}
@@ -80,10 +176,16 @@ func TestResolveDockerfileAcceptsLowercase(t *testing.T) {
 	}
 }
 
-func TestResolveDockerfileHonoursExplicitFlag(t *testing.T) {
+func TestLowercaseFallbackAppliesToAnExplicitFlag(t *testing.T) {
+	// buildx runs the same fallback on an explicit -f, guarded on the base name
+	// (build/opt.go handleLowercaseDockerfile), and so does the frontend
+	// (buildkit frontend/dockerui/config.go). So "-f <dir>/Dockerfile" against a
+	// directory holding only "dockerfile" still finds dockerfile.dockerignore.
 	dir := filepath.Join("..", "testdata", "dctx", "lowercase", "context")
-	if got := ResolveDockerfile(dir, "Other"); got != "Other" {
-		t.Errorf("ResolveDockerfile() = %q, want Other", got)
+
+	f := resolve(t, dir, filepath.Join(dir, "Dockerfile"))
+	if f.Name != "dockerfile.dockerignore" {
+		t.Errorf("ignore file = %q, want dockerfile.dockerignore", f.Name)
 	}
 }
 
@@ -92,10 +194,7 @@ func TestPercentInIgnoreFileNameIsNotAFormatVerb(t *testing.T) {
 	// containing % corrupted the message. Loading must succeed and report the
 	// name verbatim.
 	dir := filepath.Join("..", "testdata", "dctx", "percent", "context")
-	f, err := LoadIgnoreFile(dir, "we%ird")
-	if err != nil {
-		t.Fatal(err)
-	}
+	f := resolve(t, dir, filepath.Join(dir, "we%ird"))
 	if f.Name != "we%ird.dockerignore" {
 		t.Errorf("ignore file = %q, want we%%ird.dockerignore", f.Name)
 	}
@@ -103,11 +202,23 @@ func TestPercentInIgnoreFileNameIsNotAFormatVerb(t *testing.T) {
 
 func TestMissingIgnoreFileIsNotAnError(t *testing.T) {
 	dir := filepath.Join("..", "testdata", "dctx", "none", "context")
-	f, err := LoadIgnoreFile(dir, "Dockerfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	f := resolve(t, dir, "")
 	if f.Name != "" || len(f.Rules) != 0 {
 		t.Errorf("LoadIgnoreFile() = %#v, want an empty result", f)
+	}
+}
+
+func TestCheckContextDirRejectsAFile(t *testing.T) {
+	// "build-context ls path/to/Dockerfile" is the natural mistake, because the
+	// image-refs commands do take file paths. Before this check it failed with
+	// "open .../Dockerfile/Dockerfile.dockerignore: not a directory", naming a
+	// path the caller never mentioned.
+	file := filepath.Join("..", "testdata", "dctx", "none", "context", "Dockerfile")
+	err := CheckContextDir(file)
+	if err == nil {
+		t.Fatal("CheckContextDir() = nil, want an error for a regular file")
+	}
+	if !strings.Contains(err.Error(), "context must be a directory") {
+		t.Errorf("CheckContextDir() = %v, want docker build's own wording", err)
 	}
 }

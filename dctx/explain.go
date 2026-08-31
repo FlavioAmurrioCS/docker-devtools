@@ -44,13 +44,19 @@ func Explain(opt Options, target string) (*Explanation, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := CheckContextDir(opt.Context); err != nil {
+		return nil, err
+	}
 
 	rel, err := relToContext(contextDir, target)
 	if err != nil {
 		return nil, err
 	}
 
-	dockerfile := ResolveDockerfile(contextDir, opt.Dockerfile)
+	dockerfile, err := ResolveDockerfile(opt.Context, opt.Dockerfile)
+	if err != nil {
+		return nil, err
+	}
 	ignoreFile, err := LoadIgnoreFile(contextDir, dockerfile)
 	if err != nil {
 		return nil, err
@@ -87,16 +93,17 @@ func Explain(opt Options, target string) (*Explanation, error) {
 		exists = false
 	}
 
-	return &Explanation{
+	exp := &Explanation{
 		Schema:     SchemaVersion,
 		Context:    contextDir,
-		Dockerfile: dockerfile,
+		Dockerfile: dockerfile.Display,
 		Ignorefile: ignoreFile.Name,
 		Path:       filepath.ToSlash(rel),
 		Status:     statusOf(ignored),
 		Exists:     exists,
 		Rules:      rules,
-	}, nil
+	}
+	return exp, nil
 }
 
 // relToContext normalizes target to a clean path relative to contextDir.

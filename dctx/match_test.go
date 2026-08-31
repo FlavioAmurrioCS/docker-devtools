@@ -20,8 +20,10 @@ func TestAttributionAgreesWithMatcher(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctxDir := filepath.Join(dir, "context")
 			c := loadCase(t, dir)
-			dockerfile := ResolveDockerfile(ctxDir, c.Dockerfile)
-
+			dockerfile, err := ResolveDockerfile(ctxDir, c.dockerfilePath(dir))
+			if err != nil {
+				t.Fatal(err)
+			}
 			ignoreFile, err := LoadIgnoreFile(ctxDir, dockerfile)
 			if err != nil {
 				t.Fatal(err)

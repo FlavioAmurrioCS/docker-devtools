@@ -126,17 +126,30 @@ func TestStageReferencesAreNotImages(t *testing.T) {
 
 func TestFileKind(t *testing.T) {
 	cases := map[string]Kind{
-		"Dockerfile":          KindDockerfileFrom,
-		"dockerfile":          KindDockerfileFrom,
-		"Containerfile":       KindDockerfileFrom,
-		"Dockerfile.pinned":   KindDockerfileFrom,
-		"api.Dockerfile":      KindDockerfileFrom,
+		"Dockerfile":        KindDockerfileFrom,
+		"dockerfile":        KindDockerfileFrom,
+		"Containerfile":     KindDockerfileFrom,
+		"Dockerfile.pinned": KindDockerfileFrom,
+		"api.Dockerfile":    KindDockerfileFrom,
+		// Both spellings take both affixes, case-insensitively.
+		"dockerfile.dev":      KindDockerfileFrom,
+		"Containerfile.dev":   KindDockerfileFrom,
+		"api.Containerfile":   KindDockerfileFrom,
+		"containerfile":       KindDockerfileFrom,
 		"compose.yaml":        KindComposeImage,
 		"compose.yml":         KindComposeImage,
 		"docker-compose.yaml": KindComposeImage,
 		"compose.prod.yaml":   KindComposeImage,
 		"README.md":           "",
 		"values.yaml":         "",
+		// An ignore file is named after its Dockerfile and sits beside it, so
+		// it matches the "Dockerfile." prefix. Parsing it as instructions
+		// reports "unknown instruction" for a valid file.
+		".dockerignore":                 "",
+		"Dockerfile.dockerignore":       "",
+		"Dockerfile.dev.dockerignore":   "",
+		"api.Dockerfile.dockerignore":   "",
+		"build.Dockerfile.dockerignore": "",
 	}
 	for in, want := range cases {
 		if got := FileKind(in); got != want {

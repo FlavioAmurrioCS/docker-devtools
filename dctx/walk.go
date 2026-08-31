@@ -117,8 +117,14 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := CheckContextDir(opt.Context); err != nil {
+		return nil, err
+	}
 
-	dockerfile := ResolveDockerfile(contextDir, opt.Dockerfile)
+	dockerfile, err := ResolveDockerfile(opt.Context, opt.Dockerfile)
+	if err != nil {
+		return nil, err
+	}
 	ignoreFile, err := LoadIgnoreFile(contextDir, dockerfile)
 	if err != nil {
 		return nil, err
@@ -126,6 +132,14 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 	m, err := newMatcher(ignoreFile)
 	if err != nil {
 		return nil, err
+	}
+	// With no ignore file there are no rules, so the listing is the whole tree.
+	// That is worth saying: it is the reason .git and a virtualenv show up in
+	// what looks like a build context.
+	var warnings []string
+	if ignoreFile.Name == "" {
+		warnings = append(warnings,
+			fmt.Sprintf("no .dockerignore in %s; every file is sent", opt.Context))
 	}
 
 	root, err := fsutil.NewFS(contextDir)
@@ -139,9 +153,10 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 		res: &Result{
 			Schema:     SchemaVersion,
 			Context:    contextDir,
-			Dockerfile: dockerfile,
+			Dockerfile: dockerfile.Display,
 			Ignorefile: ignoreFile.Name,
 			Entries:    []Entry{},
+			Warnings:   warnings,
 		},
 	}
 	if opt.Mode != ModeIncluded {

@@ -102,7 +102,7 @@ class GoBinaryBuildHook(BuildHookInterface[Any]):
         if go is None:
             msg = (
                 "the Go toolchain is required to build this package. "
-                "Install Go 1.25+ (https://go.dev/dl/), or install a prebuilt wheel."
+                "Install Go 1.26+ (https://go.dev/dl/), or install a prebuilt wheel."
             )
             raise RuntimeError(msg)
 

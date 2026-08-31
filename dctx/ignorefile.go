@@ -52,32 +52,112 @@ func (f *IgnoreFile) Patterns() []string {
 	return out
 }
 
-// ResolveDockerfile reports the Dockerfile name to derive the ignore file from.
+// DockerfileRef is the Dockerfile a build would read, and how to talk about it.
+type DockerfileRef struct {
+	// Path is absolute. When Explicit is false it need not exist: only
+	// "<Path>.dockerignore" is ever opened.
+	Path string
+	// Display is what to report: relative to the context when the file is
+	// inside it, and the value as the caller spelled it when it is not.
+	Display string
+	// Explicit reports whether the path came from a -f value.
+	Explicit bool
+}
+
+// ResolveDockerfile locates the Dockerfile a build would read.
 //
-// When flagValue is empty this mirrors BuildKit, which looks for "Dockerfile"
-// and also accepts the lowercase spelling (moby/moby#10858). The returned name
-// need not exist: it is only used to derive "<name>.dockerignore".
+// flagValue is the -f/--file value, resolved from the current working directory
+// rather than the context, which is what docker build does. docker/cli says so
+// outright (cli/command/image/build/context.go:262): "When using a local context
+// directory, and the Dockerfile is specified with the `-f/--file` option then it
+// is considered relative to the current directory and not the context
+// directory." Empty means the default in the context root.
 //
-// The candidates are compared against the directory listing rather than
-// stat'ed, so the answer does not depend on whether the filesystem is
-// case-sensitive. os.Stat("Dockerfile") succeeds on a macOS volume holding
-// only "dockerfile", which would report a different name than the same tree
-// on Linux. Both spellings open the same file there either way, so this
-// changes only what gets reported, not which file is used.
-func ResolveDockerfile(contextDir, flagValue string) string {
-	if flagValue != "" {
-		return flagValue
+// An explicit value must exist, as it must for docker build, which fails with
+// "failed to read dockerfile: open ...: no such file or directory". A value that
+// only resolves inside the context is the pre-0.1 spelling, so say what to pass
+// instead rather than just failing.
+func ResolveDockerfile(contextDir, flagValue string) (DockerfileRef, error) {
+	// Both paths are made absolute before anything is compared: a caller may
+	// pass either spelling, and Display is computed with filepath.Rel, which
+	// gives nonsense when one side is relative and the other is not.
+	// Kept for diagnostics: the hint below has to echo the spelling the caller
+	// used, not an absolute path they never typed.
+	givenContext := contextDir
+	contextDir, err := filepath.Abs(contextDir)
+	if err != nil {
+		return DockerfileRef{}, err
+	}
+
+	if flagValue == "" {
+		// The default must be there, as it must for docker build, which fails
+		// with "failed to read dockerfile: open Dockerfile: no such file or
+		// directory". Listing a context for a build that cannot run describes
+		// nothing, and the -f path already holds to this rule.
+		name := lowercaseFallback(contextDir, DefaultDockerfileName)
+		path := filepath.Join(contextDir, name)
+		if !statOK(path) {
+			return DockerfileRef{}, fmt.Errorf(
+				"no %s in %s; pass -f to name one", DefaultDockerfileName, givenContext)
+		}
+		return DockerfileRef{Path: path, Display: name}, nil
+	}
+
+	abs, err := filepath.Abs(flagValue)
+	if err != nil {
+		return DockerfileRef{}, err
+	}
+	// buildx applies the lowercase fallback to an explicit -f too, guarded on
+	// the base name (build/opt.go handleLowercaseDockerfile), and so does the
+	// frontend (buildkit frontend/dockerui/config.go).
+	abs = filepath.Join(filepath.Dir(abs), lowercaseFallback(filepath.Dir(abs), filepath.Base(abs)))
+
+	if _, err := os.Stat(abs); err != nil {
+		if statOK(filepath.Join(contextDir, flagValue)) {
+			return DockerfileRef{}, fmt.Errorf(
+				"dockerfile %s: no such file. The path is relative to the current directory, "+
+					"as it is for docker build; did you mean %s?",
+				flagValue, filepath.Join(givenContext, flagValue))
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			return DockerfileRef{}, fmt.Errorf("dockerfile %s: no such file or directory", flagValue)
+		}
+		return DockerfileRef{}, fmt.Errorf("dockerfile %s: %w", flagValue, err)
+	}
+
+	return DockerfileRef{Path: abs, Display: displayPath(contextDir, abs), Explicit: true}, nil
+}
+
+// lowercaseFallback returns "dockerfile" when dir holds that spelling and not
+// "Dockerfile" (moby/moby#10858). Any other name is returned untouched, which
+// is the same guard buildx and the frontend both apply.
+//
+// Those two spellings are the whole candidate set, because they are all
+// buildkit looks for (frontend/dockerui: DefaultDockerfileName plus the
+// lowercase form). There is deliberately no Containerfile fallback here even
+// though imgref.FileKind accepts the name: what docker opens by default and
+// what is worth scanning for references are different questions.
+//
+// Candidates are compared against the directory listing rather than stat'ed, so
+// the answer does not depend on whether the filesystem is case-sensitive.
+// os.Stat("Dockerfile") succeeds on a macOS volume holding only "dockerfile",
+// which would report a different name than the same tree on Linux. Both
+// spellings open the same file there either way, so this changes only what gets
+// reported, not which file is used.
+func lowercaseFallback(dir, name string) string {
+	if name != DefaultDockerfileName {
+		return name
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return name
 	}
 	lower := strings.ToLower(DefaultDockerfileName)
-	entries, err := os.ReadDir(contextDir)
-	if err != nil {
-		return DefaultDockerfileName
-	}
 	found := ""
 	for _, e := range entries {
 		switch e.Name() {
 		case DefaultDockerfileName:
-			return DefaultDockerfileName
+			return name
 		case lower:
 			found = lower
 		}
@@ -85,19 +165,63 @@ func ResolveDockerfile(contextDir, flagValue string) string {
 	if found != "" {
 		return found
 	}
-	return DefaultDockerfileName
+	return name
+}
+
+// displayPath keeps a reported path readable and machine-independent: relative
+// to the context when the file is inside it, and relative to the working
+// directory when it is not, which is how the caller named it in the first place.
+//
+// It is derived from the resolved path rather than the given one, so a name the
+// lowercase fallback rewrote is reported as the file that was actually read.
+func displayPath(contextDir, abs string) string {
+	if rel, err := filepath.Rel(contextDir, abs); err == nil && !strings.HasPrefix(rel, "..") {
+		return filepath.ToSlash(rel)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(cwd, abs); err == nil {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(abs)
+}
+
+func statOK(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// CheckContextDir rejects a context that is not a directory.
+//
+// Without it the first failure is whatever LoadIgnoreFile or fsutil reports:
+// "build-context ls path/to/Dockerfile" fails with
+// "open path/to/Dockerfile/Dockerfile.dockerignore: not a directory", naming a
+// file the caller never mentioned. docker build says "context must be a
+// directory", so say that.
+func CheckContextDir(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("context must be a directory: %s", dir)
+	}
+	return nil
 }
 
 // LoadIgnoreFile finds and parses the ignore file for a build.
 //
-// Candidates are tried in BuildKit's order: "<dockerfile>.dockerignore" first,
-// then ".dockerignore" in the context directory
-// (moby/buildkit/frontend/dockerui/config.go). dockerfile may be an absolute
-// path, in which case the per-Dockerfile candidate sits beside it rather than
-// inside the context.
-func LoadIgnoreFile(contextDir, dockerfile string) (*IgnoreFile, error) {
-	for _, candidate := range ignoreCandidates(contextDir, dockerfile) {
-		data, err := os.ReadFile(candidate.path)
+// Candidates are tried in BuildKit's order: "<dockerfile>.dockerignore" beside
+// the Dockerfile first, then ".dockerignore" in the context directory
+// (moby/buildkit frontend/dockerui/config.go). The first wins outright: the
+// frontend loads the context-root file only when the per-Dockerfile one came up
+// empty, so these replace rather than merge.
+//
+// The Dockerfile may sit outside the context, because buildx mounts its
+// directory as a separate "dockerfile" input (buildx build/opt.go).
+func LoadIgnoreFile(contextDir string, df DockerfileRef) (*IgnoreFile, error) {
+	for _, c := range ignoreCandidates(contextDir, df) {
+		data, err := os.ReadFile(c.path)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
@@ -106,9 +230,9 @@ func LoadIgnoreFile(contextDir, dockerfile string) (*IgnoreFile, error) {
 		}
 		rules, err := parseRules(data)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", candidate.name, err)
+			return nil, fmt.Errorf("%s: %w", c.name, err)
 		}
-		return &IgnoreFile{Name: candidate.name, Rules: rules}, nil
+		return &IgnoreFile{Name: c.name, Rules: rules}, nil
 	}
 	return &IgnoreFile{}, nil
 }
@@ -118,19 +242,11 @@ type candidate struct {
 	path, name string
 }
 
-func ignoreCandidates(contextDir, dockerfile string) []candidate {
-	perDockerfile := dockerfile + ".dockerignore"
-	name := perDockerfile
-	path := perDockerfile
-	if !filepath.IsAbs(perDockerfile) {
-		path = filepath.Join(contextDir, perDockerfile)
-	} else {
-		// An absolute -f lives outside the context; report it as given.
-		name = filepath.Base(perDockerfile)
-	}
+func ignoreCandidates(contextDir string, df DockerfileRef) []candidate {
+	const suffix = ".dockerignore"
 	return []candidate{
-		{path: path, name: name},
-		{path: filepath.Join(contextDir, ".dockerignore"), name: ".dockerignore"},
+		{path: df.Path + suffix, name: df.Display + suffix},
+		{path: filepath.Join(contextDir, suffix), name: suffix},
 	}
 }
 

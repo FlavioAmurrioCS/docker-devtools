@@ -108,7 +108,7 @@ def image_ls(*paths: str) -> ImageResult:
     Returns:
         The parsed scan.
     """
-    data = _run(["image", "ls", "--json", *paths])
+    data = _run(["image-refs", "ls", "--json", *paths])
     _check_schema(data.get("schema"))
     return ImageResult(
         schema=data["schema"],
@@ -152,7 +152,7 @@ def image_update(
     Returns:
         The plan, whether or not it was applied.
     """
-    args = ["image", "update", "--json"]
+    args = ["image-refs", "update", "--json"]
     if pin_digest:
         args.append("--pin-digest")
     if tag_policy is not None:

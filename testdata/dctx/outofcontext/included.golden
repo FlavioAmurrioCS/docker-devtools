@@ -1,0 +1,10 @@
+dockerfile: ../testdata/dctx/outofcontext/build.Dockerfile
+ignorefile: ../testdata/dctx/outofcontext/build.Dockerfile.dockerignore
+included:   5 files, 47 bytes
+ignored:    not counted
+--
++ .dockerignore
++ build.Dockerfile.dockerignore
++ decoy-only
++ keep
++ root-only

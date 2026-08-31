@@ -166,10 +166,12 @@ func TestUpdateIsIdempotent(t *testing.T) {
 	}
 }
 
-// Unresolved references, such as ARG-interpolated bases, must be counted and
-// left alone rather than rewritten on a guess.
+// Unresolved references must be counted and left alone rather than rewritten on
+// a guess. An ARG default is not one of them any more -- see the test below --
+// so this uses the kinds that genuinely cannot be resolved: an unset ARG, a
+// fragment that no line spells out, and scratch.
 func TestUpdateSkipsUnresolvedReferences(t *testing.T) {
-	body := "ARG BASE=alpine:3.22\nFROM $BASE\nFROM scratch\n"
+	body := "ARG UNSET\nARG VERSION=3.22\nFROM $UNSET\nFROM alpine:${VERSION}\nFROM scratch\n"
 	_, refs := writeDockerfile(t, body)
 
 	report, err := Plan(context.Background(), localregistry.New(), refs, Options{PinDigest: true})
@@ -179,8 +181,41 @@ func TestUpdateSkipsUnresolvedReferences(t *testing.T) {
 	if len(report.Changes) != 0 {
 		t.Errorf("planned %d changes for unresolved references", len(report.Changes))
 	}
-	if report.Skipped != 2 {
-		t.Errorf("skipped %d, want 2", report.Skipped)
+	if report.Skipped != 3 {
+		t.Errorf("skipped %d, want 3", report.Skipped)
+	}
+}
+
+// An ARG default that a FROM resolves to is the base image, and the ARG line is
+// the only place an update can write it. Renovate treats it the same way.
+func TestUpdateBumpsAnArgDefault(t *testing.T) {
+	host := startRegistry(t, "library/app", "1.0", "1.1")
+	body := fmt.Sprintf("ARG BASE=%s/library/app:1.0\nFROM ${BASE} AS one\nFROM ${BASE} AS two\n", host)
+	path, refs := writeDockerfile(t, body)
+
+	report, err := Plan(context.Background(), localregistry.New(), refs, Options{Policy: PolicySamePattern})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Changes) != 1 {
+		t.Fatalf("planned %d changes, want 1: two FROMs share one ARG, and two edits "+
+			"over the same bytes would be rejected", len(report.Changes))
+	}
+	if report.Changes[0].Line != 1 {
+		t.Errorf("change reported on line %d, want 1, the ARG line it writes",
+			report.Changes[0].Line)
+	}
+	if _, err := Apply(report); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("ARG BASE=%s/library/app:1.1\nFROM ${BASE} AS one\nFROM ${BASE} AS two\n", host)
+	if string(after) != want {
+		t.Errorf("after update:\n%s\nwant:\n%s", after, want)
 	}
 }
 

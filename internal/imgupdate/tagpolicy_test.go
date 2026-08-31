@@ -1,6 +1,7 @@
 package imgupdate
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -28,6 +29,10 @@ func TestSelectTag(t *testing.T) {
 		{"same pattern will not cross a major", "3.13-slim", PolicySamePattern, ""},
 		{"minor stays inside the major", "3.11-slim", PolicyMinor, "3.13-slim"},
 		{"patch stays inside the minor", "3.12.1-slim", PolicyPatch, "3.12.7-slim"},
+		// patch compares components, not shapes: a missing component counts as
+		// zero, so a tag pinning no patch at all may grow one. Only
+		// same-pattern keeps the shape. The README's policy table says so.
+		{"patch may lengthen a tag that pins no patch", "3.12-slim", PolicyPatch, "3.12.7-slim"},
 		{"latest may cross a major", "3.12-slim", PolicyLatest, "4.0-slim"},
 		{"an unversioned tag never moves", "latest", PolicySamePattern, ""},
 		{"a codename tag never moves", "bookworm", PolicyLatest, ""},
@@ -99,5 +104,43 @@ func TestNewerTreatsMissingComponentsAsZero(t *testing.T) {
 	}
 	if newer(b, a) {
 		t.Error("3.12 should not sort above 3.12.1")
+	}
+}
+
+func TestSortTags(t *testing.T) {
+	// Deliberately in the lexical order a registry is required to return, which
+	// is the order that puts 3.10 before 3.9 and 2.6 before 20190228.
+	in := []string{
+		"2.6", "20190228", "3.1", "3.10", "3.10-slim", "3.9", "3.9-slim",
+		"edge", "latest",
+	}
+	versioned, unversioned := SortTags(in)
+
+	want := []string{"2.6", "3.1", "3.9", "3.9-slim", "3.10", "3.10-slim", "20190228"}
+	if !reflect.DeepEqual(versioned, want) {
+		t.Errorf("SortTags() versioned =\n%q\nwant\n%q", versioned, want)
+	}
+	if wantRest := []string{"edge", "latest"}; !reflect.DeepEqual(unversioned, wantRest) {
+		t.Errorf("SortTags() unversioned = %q, want %q", unversioned, wantRest)
+	}
+}
+
+func TestTagSuffix(t *testing.T) {
+	cases := map[string]struct {
+		suffix string
+		ok     bool
+	}{
+		"3.12-slim":   {"-slim", true},
+		"3.12.1-slim": {"-slim", true},
+		"3.12":        {"", true},
+		"v1.2.3":      {"", true},
+		"latest":      {"", false},
+		"bookworm":    {"", false},
+	}
+	for tag, want := range cases {
+		got, ok := TagSuffix(tag)
+		if got != want.suffix || ok != want.ok {
+			t.Errorf("TagSuffix(%q) = %q, %v; want %q, %v", tag, got, ok, want.suffix, want.ok)
+		}
 	}
 }
