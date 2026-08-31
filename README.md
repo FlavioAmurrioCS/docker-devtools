@@ -125,9 +125,30 @@ takes:
     --all         list everything, prefixed + for sent and - for excluded
     --size        prefix each path with its size in bytes
     --why         append the ignore-file rule that decided each path
+    --target STAGE  build as if --target were given, changing what is reached
+    --whole-context list everything the ignore rules permit
     --summary     print totals to stderr after the listing
 -0, --zero        separate paths with NUL
 ```
+
+### What actually gets sent
+
+BuildKit transfers only the paths the Dockerfile names. Every `COPY` and `ADD`
+source becomes a follow path on the build context, so a Dockerfile that copies
+one file transfers one file, however large the directory around it:
+
+```console
+$ docker-devtools build-context ls --summary
+taplo.toml
+transferred: 1 file, 1.7 KiB
+permitted:   24626 files, 458.5 MiB
+```
+
+The gap between those two lines is the point. `permitted` is what the ignore
+rules allow through, which is also what gets sent when something copies the
+context whole: `COPY . /` switches the filter off. `--whole-context` lists that
+set, and `--target` picks the stage, since a stage the build never reaches never
+reads its sources.
 
 ### Which Dockerfile, and which .dockerignore
 

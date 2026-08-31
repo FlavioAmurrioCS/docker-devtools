@@ -23,13 +23,18 @@ type ContextLsCmd struct {
 	// absolutises internally where it matters.
 	Path string `arg:"" optional:"" default:"." help:"Build context directory."`
 
-	File    string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the current directory (default: PATH/Dockerfile). Also selects <path>.dockerignore."`
-	Ignored bool   `xor:"mode" help:"List the excluded files instead of the included ones."`
-	All     bool   `xor:"mode" help:"List every file, prefixed + for sent and - for excluded."`
-	Size    bool   `help:"Prefix each path with its size in bytes."`
-	Why     bool   `xor:"format" help:"Append the ignore-file rule that decided each path."`
-	Summary bool   `help:"Print totals to stderr after the listing."`
-	JSON    bool   `name:"json" help:"Emit the full result as JSON."`
+	File   string `short:"f" placeholder:"PATH" help:"Path to the Dockerfile, relative to the current directory (default: PATH/Dockerfile). Also selects <path>.dockerignore."`
+	Target string `placeholder:"STAGE" help:"Stage to build, as docker build --target selects it. Changes which COPY sources are reachable."`
+	// A build sends only the paths its Dockerfile names, so the two sets differ
+	// for every Dockerfile that does not copy the context whole.
+	WholeContext bool `help:"List everything the ignore rules permit, not just what the Dockerfile pulls in."`
+
+	Ignored bool `xor:"mode" help:"List the excluded files instead of the included ones."`
+	All     bool `xor:"mode" help:"List every file, prefixed + for sent and - for excluded."`
+	Size    bool `help:"Prefix each path with its size in bytes."`
+	Why     bool `xor:"format" help:"Append the ignore-file rule that decided each path."`
+	Summary bool `help:"Print totals to stderr after the listing."`
+	JSON    bool `name:"json" help:"Emit the full result as JSON."`
 	// --why annotates each line, which would corrupt output meant for xargs.
 	Zero bool `short:"0" xor:"format" help:"Separate paths with NUL, for xargs -0."`
 }
@@ -44,9 +49,11 @@ func (c *ContextLsCmd) Run(st *Streams) error {
 	}
 
 	res, err := dctx.Walk(context.Background(), dctx.Options{
-		Context:    c.Path,
-		Dockerfile: c.File,
-		Mode:       mode,
+		Context:      c.Path,
+		Dockerfile:   c.File,
+		Target:       c.Target,
+		WholeContext: c.WholeContext,
+		Mode:         mode,
 	})
 	if err != nil {
 		return err
@@ -90,13 +97,22 @@ func (c *ContextLsCmd) Run(st *Streams) error {
 }
 
 func printSummary(w io.Writer, res *dctx.Result) {
-	fmt.Fprintf(w, "included: %s, %s\n",
-		plural(res.Summary.Included.Files, "file"), humanBytes(res.Summary.Included.Bytes))
+	// The gap between what is transferred and what the ignore rules permit is
+	// the interesting number: it is the difference between a 458 MiB context
+	// and the one file a Dockerfile actually reads.
+	if t := res.Summary.Transferred; t != nil {
+		fmt.Fprintf(w, "transferred: %s, %s\n", plural(t.Files, "file"), humanBytes(t.Bytes))
+		fmt.Fprintf(w, "permitted:   %s, %s\n",
+			plural(res.Summary.Included.Files, "file"), humanBytes(res.Summary.Included.Bytes))
+	} else {
+		fmt.Fprintf(w, "transferred: %s, %s (the Dockerfile copies the context whole)\n",
+			plural(res.Summary.Included.Files, "file"), humanBytes(res.Summary.Included.Bytes))
+	}
 	if res.Summary.Ignored != nil {
-		fmt.Fprintf(w, "ignored:  %s, %s\n",
+		fmt.Fprintf(w, "ignored:     %s, %s\n",
 			plural(res.Summary.Ignored.Files, "file"), humanBytes(res.Summary.Ignored.Bytes))
 	} else {
-		fmt.Fprintln(w, "ignored:  not counted (ignored directories were skipped; use --all)")
+		fmt.Fprintln(w, "ignored:     not counted (ignored directories were skipped; use --all)")
 	}
 }
 

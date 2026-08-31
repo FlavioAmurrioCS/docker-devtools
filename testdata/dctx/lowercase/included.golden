@@ -2,6 +2,7 @@ dockerfile: dockerfile
 ignorefile: dockerfile.dockerignore
 included:   3 files, 31 bytes
 ignored:    not counted
+sent:       the whole context
 --
 + dockerfile
 + dockerfile.dockerignore

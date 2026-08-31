@@ -14,7 +14,7 @@ import (
 
 // SchemaVersion is the version of the JSON document Result marshals to.
 // Consumers should refuse documents with an unknown value.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Status is whether a path reaches the daemon.
 type Status string
@@ -47,6 +47,14 @@ type Options struct {
 	// Dockerfile is the -f value, used to derive "<name>.dockerignore". Empty
 	// means auto-detect.
 	Dockerfile string
+	// Target is the stage to build, as docker build --target selects it. Empty
+	// means the last stage. It changes which COPY sources are reachable, and so
+	// what the context transfers.
+	Target string
+	// WholeContext reports every path the ignore rules permit, rather than only
+	// the paths the Dockerfile pulls in. That is what a build sends only when
+	// something copies the context whole.
+	WholeContext bool
 	// Mode selects which entries are reported.
 	Mode Mode
 }
@@ -57,6 +65,10 @@ type Entry struct {
 	Status Status `json:"status"`
 	Size   int64  `json:"size"`
 	Dir    bool   `json:"dir,omitempty"`
+	// Transferred marks a path a build actually reads from the context. A path
+	// the ignore rules permit is still not sent unless some COPY or ADD names
+	// it, which is why a repository can list at 458 MiB and build with 32 B.
+	Transferred bool `json:"transferred,omitempty"`
 	// Materialized marks a directory that an ignore rule matched but that
 	// Docker still sends, because a negated rule re-included something inside
 	// it and the directory has to exist to hold it.
@@ -79,6 +91,9 @@ type Counts struct {
 type Summary struct {
 	Included Counts  `json:"included"`
 	Ignored  *Counts `json:"ignored"`
+	// Transferred totals what the Dockerfile actually pulls in. It is nil when
+	// the build copies the context whole, where it would only repeat Included.
+	Transferred *Counts `json:"transferred,omitempty"`
 }
 
 // Result is the full output of a walk.
@@ -133,13 +148,13 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	// With no ignore file there are no rules, so the listing is the whole tree.
-	// That is worth saying: it is the reason .git and a virtualenv show up in
-	// what looks like a build context.
+	// With no ignore file nothing is excluded, so every path is a candidate.
+	// Whether it is sent is a separate question, answered by what the
+	// Dockerfile copies.
 	var warnings []string
 	if ignoreFile.Name == "" {
 		warnings = append(warnings,
-			fmt.Sprintf("no .dockerignore in %s; every file is sent", opt.Context))
+			fmt.Sprintf("no .dockerignore in %s; nothing is excluded", opt.Context))
 	}
 
 	root, err := fsutil.NewFS(contextDir)
@@ -147,9 +162,18 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 		return nil, err
 	}
 
+	// What a build actually transfers is the ignore-filtered set narrowed to
+	// the paths the Dockerfile names. transferred is nil when the build copies
+	// the context whole, where the two sets are the same thing.
+	transferred, err := transferredPaths(ctx, root, contextDir, dockerfile, ignoreFile, opt)
+	if err != nil {
+		return nil, err
+	}
+
 	w := &walker{
-		matcher: m,
-		mode:    opt.Mode,
+		matcher:     m,
+		mode:        opt.Mode,
+		transferred: transferred,
 		res: &Result{
 			Schema:     SchemaVersion,
 			Context:    contextDir,
@@ -161,6 +185,9 @@ func Walk(ctx context.Context, opt Options) (*Result, error) {
 	}
 	if opt.Mode != ModeIncluded {
 		w.res.Summary.Ignored = &Counts{}
+	}
+	if transferred != nil {
+		w.res.Summary.Transferred = &Counts{}
 	}
 	// fsutil's own optimization: when nothing can be re-included, an ignored
 	// directory's whole subtree is ignored and need not be visited. The other
@@ -184,6 +211,22 @@ type walker struct {
 	canSkip bool
 	stack   []dirFrame
 	res     *Result
+	// transferred holds the paths a build reads from the context, or nil when
+	// it reads the context whole and every included path is transferred.
+	transferred map[string]struct{}
+}
+
+// sends reports whether a build actually reads path from the context.
+//
+// The key is slash-normalized, as Entry.Path is: the walk hands out native
+// separators, so on Windows a nested path would otherwise never match one of
+// fsutil's, and every file below the top level would read as not sent.
+func (w *walker) sends(path string) bool {
+	if w.transferred == nil {
+		return true
+	}
+	_, ok := w.transferred[filepath.ToSlash(path)]
+	return ok
 }
 
 func (w *walker) visit(path string, d gofs.DirEntry, err error) error {
@@ -232,6 +275,7 @@ func (w *walker) visit(path string, d gofs.DirEntry, err error) error {
 			// the daemon and its subtree is not worth visiting.
 			return filepath.SkipDir
 		}
+		entry.Transferred = w.sends(path)
 		w.stack = append(w.stack, dirFrame{
 			prefix:    path + string(filepath.Separator),
 			matchInfo: matchInfo,
@@ -252,13 +296,25 @@ func (w *walker) visit(path string, d gofs.DirEntry, err error) error {
 
 	w.res.Summary.Included.Files++
 	w.res.Summary.Included.Bytes += size
+	entry.Transferred = w.sends(path)
+	if entry.Transferred && w.res.Summary.Transferred != nil {
+		w.res.Summary.Transferred.Files++
+		w.res.Summary.Transferred.Bytes += size
+	}
 	w.markIncluded()
 	w.emit(entry)
 	return nil
 }
 
 // emit records an entry when the selected mode asks for its status.
+//
+// A path the ignore rules permit but no COPY reads is not sent, so it is left
+// out of an included listing. It is still reported by the other modes, which
+// exist to explain the ignore file rather than the transfer.
 func (w *walker) emit(entry Entry) {
+	if w.mode == ModeIncluded && entry.Status == StatusIncluded && !entry.Transferred {
+		return
+	}
 	switch w.mode {
 	case ModeIncluded:
 		if entry.Status != StatusIncluded {

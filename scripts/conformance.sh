@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Compare `docker-devtools build-context ls` against what Docker really sends.
 #
-# For each fixture the script builds `FROM scratch` + `COPY . /` with the
-# tar exporter, so the resulting tarball is exactly the build context Docker
-# assembled, then diffs its members against our listing. This is the only
-# check that proves conformance rather than asserting it.
+# For each fixture the script builds it with the tar exporter, so the resulting
+# tarball is exactly what Docker read from the context, then diffs its members
+# against our listing. This is the only check that proves conformance rather
+# than asserting it.
+#
+# Most fixtures use `FROM scratch` + `COPY . /`, which copies the context whole.
+# A fixture that copies selectively must mirror its destinations onto its source
+# paths (`COPY sub /sub`), because the tar holds image paths and the listing
+# holds context paths, and only then are the two comparable.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,16 +47,28 @@ for dir in testdata/dctx/*/; do
     dockerfile="$(sed -n 's/.*"dockerfile"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' "${dir}case.json")"
   fi
 
-  tarball="$(mktemp -d)/ctx.tar"
-  if [ -n "$dockerfile" ]; then
-    docker build --no-cache -f "${dir}${dockerfile}" \
-      --output "type=tar,dest=$tarball" "$ctx" >/dev/null 2>&1
-    ours="$("$BIN" build-context ls -f "${dir}${dockerfile}" "$ctx")"
-  else
-    docker build --no-cache \
-      --output "type=tar,dest=$tarball" "$ctx" >/dev/null 2>&1
-    ours="$("$BIN" build-context ls "$ctx")"
+  # A fixture may also pin a --target, which changes which stages are reached
+  # and so which COPY sources are read from the context.
+  target=""
+  if [ -f "${dir}case.json" ]; then
+    target="$(sed -n 's/.*"target"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' "${dir}case.json")"
   fi
+
+  set -- --no-cache
+  ours_args=""
+  if [ -n "$dockerfile" ]; then
+    set -- "$@" -f "${dir}${dockerfile}"
+    ours_args="$ours_args -f ${dir}${dockerfile}"
+  fi
+  if [ -n "$target" ]; then
+    set -- "$@" --target "$target"
+    ours_args="$ours_args --target $target"
+  fi
+
+  tarball="$(mktemp -d)/ctx.tar"
+  docker build "$@" --output "type=tar,dest=$tarball" "$ctx" >/dev/null 2>&1
+  # shellcheck disable=SC2086 # the flags are built above and are never quoted paths
+  ours="$("$BIN" build-context ls $ours_args "$ctx" 2>/dev/null)"
 
   # The tar exporter marks directories with a trailing slash; our listing
   # names them plainly. Normalise and sort both sides.

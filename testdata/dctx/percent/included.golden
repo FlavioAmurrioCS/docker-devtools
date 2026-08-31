@@ -2,6 +2,7 @@ dockerfile: we%ird
 ignorefile: we%ird.dockerignore
 included:   3 files, 29 bytes
 ignored:    not counted
+sent:       the whole context
 --
 + we%ird
 + we%ird.dockerignore

@@ -1,0 +1,7 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   7 files, 281 bytes
+ignored:    1 files, 8 bytes
+sent:       3 files, 19 bytes
+--
+- excluded.txt  <- .dockerignore:1 excluded.txt

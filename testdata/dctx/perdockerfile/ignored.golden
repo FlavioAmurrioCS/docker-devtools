@@ -2,5 +2,6 @@ dockerfile: Prj1
 ignorefile: Prj1.dockerignore
 included:   5 files, 49 bytes
 ignored:    1 files, 2 bytes
+sent:       the whole context
 --
 - only-prj1  <- Prj1.dockerignore:1 only-prj1

@@ -19,6 +19,9 @@ type fixtureCase struct {
 	// that the same string can be handed to our binary and to docker build.
 	// scripts/conformance.sh passes it to both.
 	Dockerfile string `json:"dockerfile"`
+	// Target pins a --target, which changes which stages are reached and so
+	// which COPY sources are read from the context.
+	Target string `json:"target"`
 }
 
 // dockerfilePath returns the -f value for a fixture, which is a path resolved
@@ -78,6 +81,11 @@ func render(res *Result) string {
 	} else {
 		b.WriteString("ignored:    not counted\n")
 	}
+	if t := res.Summary.Transferred; t != nil {
+		fmt.Fprintf(&b, "sent:       %d files, %d bytes\n", t.Files, t.Bytes)
+	} else {
+		b.WriteString("sent:       the whole context\n")
+	}
 	b.WriteString("--\n")
 	for _, e := range res.Entries {
 		mark := "+"
@@ -86,6 +94,10 @@ func render(res *Result) string {
 		}
 		if e.Materialized {
 			mark = "M"
+		}
+		// A path the ignore rules permit but no COPY reads is not sent.
+		if e.Status == StatusIncluded && !e.Transferred {
+			mark = "."
 		}
 		fmt.Fprintf(&b, "%s %s", mark, e.Path)
 		if e.Rule != "" {
@@ -112,6 +124,7 @@ func TestWalkGolden(t *testing.T) {
 				res, err := Walk(context.Background(), Options{
 					Context:    filepath.Join(dir, "context"),
 					Dockerfile: c.dockerfilePath(dir),
+					Target:     c.Target,
 					Mode:       mode.mode,
 				})
 				if err != nil {

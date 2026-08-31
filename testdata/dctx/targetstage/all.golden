@@ -1,0 +1,12 @@
+dockerfile: Dockerfile
+ignorefile: 
+included:   4 files, 201 bytes
+ignored:    0 files, 0 bytes
+sent:       2 files, 6 bytes
+--
+. Dockerfile
+. app
+. app/main.go
++ vendor
++ vendor/big.a
++ vendor/big.b

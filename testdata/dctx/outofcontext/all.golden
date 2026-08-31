@@ -2,6 +2,7 @@ dockerfile: ../testdata/dctx/outofcontext/build.Dockerfile
 ignorefile: ../testdata/dctx/outofcontext/build.Dockerfile.dockerignore
 included:   5 files, 47 bytes
 ignored:    1 files, 12 bytes
+sent:       the whole context
 --
 + .dockerignore
 - beside-only  <- ../testdata/dctx/outofcontext/build.Dockerfile.dockerignore:1 beside-only

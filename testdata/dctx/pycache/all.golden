@@ -2,6 +2,7 @@ dockerfile: Dockerfile
 ignorefile: .dockerignore
 included:   5 files, 50 bytes
 ignored:    2 files, 12 bytes
+sent:       the whole context
 --
 + .dockerignore
 + Dockerfile
