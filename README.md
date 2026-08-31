@@ -1,5 +1,9 @@
 # docker-devtools
 
+[![PyPI - Version](https://img.shields.io/pypi/v/docker-devtools.svg)](https://pypi.org/project/docker-devtools)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/docker-devtools.svg)](https://pypi.org/project/docker-devtools)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/FlavioAmurrioCS/docker-devtools/main.svg)](https://results.pre-commit.ci/latest/github/FlavioAmurrioCS/docker-devtools/main)
+
 Work on the Docker files in a repository: the build context a Dockerfile would
 send, and the image references it and your Compose files point at.
 
