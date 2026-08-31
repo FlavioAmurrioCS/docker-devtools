@@ -1,0 +1,17 @@
+dockerfile: Dockerfile
+ignorefile: .dockerignore
+included:   7 files, 281 bytes
+ignored:    1 files, 8 bytes
+sent:       3 files, 19 bytes
+--
+. .dockerignore
+. Dockerfile
+- excluded.txt  <- .dockerignore:1 excluded.txt
+. heavy
+. heavy/blob.bin
++ keep.txt
++ sub
++ sub/inside.txt
++ sub/nested
++ sub/nested/deep.txt
+. unreferenced.txt

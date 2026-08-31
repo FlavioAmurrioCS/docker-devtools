@@ -59,6 +59,19 @@ Compose files. It is distributed as Python wheels and as a Docker CLI plugin.
   writes to disk.
 - `dctx` is the one package here with a public import path, because the walker
   is worth reusing on its own. Treat its exported names as API.
+- A listing reports what a build *transfers*, not what the ignore rules permit.
+  BuildKit narrows the context to the COPY and ADD sources of the reachable
+  stages (`dockerfile2llb/convert.go`, `filterPaths`), unless a source
+  normalizes to `/` and switches the filter off. `dctx/dockerfile.go` collects
+  those paths and hands them to `fsutil.NewFilterFS`, which is the same call
+  `MainContext` makes. Do not reimplement the matching; it covers symlinks,
+  wildcards and directory sources.
+- **A conformance fixture that copies selectively must mirror its destinations
+  onto its source paths** (`COPY sub /sub`). The tar holds image paths and the
+  listing holds context paths, and only mirrored destinations make the two
+  comparable. `COPY . /` was convenient for exactly this reason, so every
+  fixture used it, and the suite checked only the case where BuildKit's filter
+  is switched off.
 - A Dockerfile is required. `Dockerfile` then lowercase `dockerfile` is the whole
   candidate set, matching buildkit's `frontend/dockerui`; there is deliberately
   no `Containerfile` fallback, even though `imgref.FileKind` accepts that name.

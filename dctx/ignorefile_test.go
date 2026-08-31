@@ -89,14 +89,14 @@ func TestDefaultDockerfileMustExist(t *testing.T) {
 }
 
 func TestWalkWarnsWhenNothingIsIgnored(t *testing.T) {
-	// No ignore file means the listing is the whole tree, which is the reason
-	// .git and a virtualenv turn up in what looks like a build context.
+	// No ignore file means nothing is excluded, which is the reason .git and a
+	// virtualenv are candidates at all.
 	none := filepath.Join("..", "testdata", "dctx", "none", "context")
 	res, err := Walk(context.Background(), Options{Context: none})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "every file is sent") {
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "nothing is excluded") {
 		t.Errorf("warnings = %q, want one about the missing ignore file", res.Warnings)
 	}
 
