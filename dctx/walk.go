@@ -217,11 +217,15 @@ type walker struct {
 }
 
 // sends reports whether a build actually reads path from the context.
+//
+// The key is slash-normalized, as Entry.Path is: the walk hands out native
+// separators, so on Windows a nested path would otherwise never match one of
+// fsutil's, and every file below the top level would read as not sent.
 func (w *walker) sends(path string) bool {
 	if w.transferred == nil {
 		return true
 	}
-	_, ok := w.transferred[path]
+	_, ok := w.transferred[filepath.ToSlash(path)]
 	return ok
 }
 
