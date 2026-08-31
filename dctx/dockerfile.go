@@ -94,16 +94,27 @@ func stageContextPaths(stage instructions.Stage) []string {
 }
 
 // targetStage returns the index of the stage to build.
+//
+// No target means the last stage, which is what resolveTarget does with
+// lastTarget() (dockerfile2llb/convert.go). A named target is matched
+// case-insensitively, as findStateByName lowercases both sides, and the *last*
+// stage with that name wins: buildkit keeps stages in a map keyed by name, so a
+// repeated name overwrites the earlier entry. Verified against docker, which
+// builds the second of two stages both named "dup".
 func targetStage(stages []instructions.Stage, target string) (int, error) {
 	if target == "" {
 		return len(stages) - 1, nil
 	}
+	found := -1
 	for i, s := range stages {
-		if strings.EqualFold(s.Name, target) {
-			return i, nil
+		if s.Name != "" && strings.EqualFold(s.Name, target) {
+			found = i
 		}
 	}
-	return 0, &unknownTargetError{target: target}
+	if found < 0 {
+		return 0, &unknownTargetError{target: target}
+	}
+	return found, nil
 }
 
 type unknownTargetError struct{ target string }

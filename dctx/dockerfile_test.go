@@ -51,6 +51,19 @@ func TestContextPaths(t *testing.T) {
 			body: "FROM scratch AS base\nCOPY base.txt /base.txt\nFROM base AS final\nCOPY app /app\n",
 			want: []string{"app", "base.txt"},
 		}, {
+			// buildkit keeps stages in a map keyed by name, so a repeated name
+			// overwrites the earlier entry and the last one wins. Verified
+			// against docker, which builds the second of the two here.
+			name:   "a repeated stage name resolves to the last",
+			body:   "FROM scratch AS dup\nCOPY first /first\nFROM scratch AS dup\nCOPY second /second\nFROM scratch\nCOPY app /app\n",
+			target: "dup",
+			want:   []string{"second"},
+		}, {
+			name:   "a target is matched without regard to case",
+			body:   "FROM scratch AS Tools\nCOPY vendor /vendor\nFROM scratch\nCOPY app /app\n",
+			target: "tools",
+			want:   []string{"vendor"},
+		}, {
 			name: "RUN never reads the context",
 			body: "FROM scratch\nRUN echo hi\n",
 			want: []string{},
