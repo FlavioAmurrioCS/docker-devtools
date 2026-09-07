@@ -46,12 +46,12 @@ repos:
         exclude: ^testdata/
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.12.7
+    rev: 0.12.10
     hooks:
       - id: uv-lock
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.5
+    rev: v0.16.6
     hooks:
       - id: ruff-check
         types_or: [python, pyi]
@@ -65,7 +65,7 @@ repos:
   # hook installs everywhere, including the arm64 fresh-clone container. That
   # is why this one stays a normal remote hook while taplo needed mise.
   - repo: https://github.com/rvben/rumdl-pre-commit
-    rev: v0.2.62
+    rev: v0.2.68
     hooks:
       - id: rumdl
         args: [--fix]
