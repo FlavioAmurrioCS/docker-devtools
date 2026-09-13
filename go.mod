@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/gaojunran/usage-integrations/packages/kong-usage v0.1.0
-	github.com/google/go-containerregistry v0.22.0
+	github.com/google/go-containerregistry v0.22.1
 	github.com/moby/buildkit v0.32.2
 	github.com/moby/patternmatcher v0.6.1
 	github.com/tonistiigi/fsutil v0.0.0-20260819142231-83cac42c1c52
