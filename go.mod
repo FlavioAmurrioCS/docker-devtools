@@ -3,7 +3,7 @@ module github.com/FlavioAmurrioCS/docker-devtools
 go 1.26.5
 
 require (
-	github.com/alecthomas/kong v1.16.1
+	github.com/alecthomas/kong v1.17.0
 	github.com/gaojunran/usage-integrations/packages/kong-usage v0.1.0
 	github.com/google/go-containerregistry v0.22.0
 	github.com/moby/buildkit v0.32.2
